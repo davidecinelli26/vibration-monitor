@@ -86,7 +86,7 @@ QUERY_ANOMALIE = """
         WHERE ts <= now() - make_interval(mins => %(minuti)s) AND ts > now() - make_interval(mins => %(minuti)s + 60)
         GROUP BY dispositivo
     )
-    SELECT o.dispositivo, p.rms_prima, o.rms_ora, o.rms_ora / p.rms_prima AS rapporto, p.picco_hz_prima, o.picco_hz_ora
+    SELECT o.dispositivo, p.rms_prima, o.rms_ora, o.rms_ora / NULLIF(p.rms_prima, 0) AS rapporto, p.picco_hz_prima, o.picco_hz_ora
     FROM ora o
     JOIN prima p ON o.dispositivo = p.dispositivo
     WHERE o.rms_ora >= %(soglia)s * p.rms_prima
