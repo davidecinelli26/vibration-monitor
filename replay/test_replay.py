@@ -64,3 +64,10 @@ def test_mafaulda_squilibrio_si_vede():
     assert all(abs(hz - 29.5) < 1 for _, hz, _ in squilibrio)
     rms = lambda f: sum(r for r, _, _ in f) / len(f)
     assert rms(squilibrio) > 2.5 * rms(sano)
+
+
+def test_motore_1_peggiora_e_poi_resta_sull_ultima_fase():
+    from replay import FASE_FINESTRE, SCENARIO_MOTORE_1, fase_motore_1
+    assert fase_motore_1(0) == "mafaulda-normale"
+    assert fase_motore_1(FASE_FINESTRE) == "mafaulda-squilibrio-6g"
+    assert fase_motore_1(100 * FASE_FINESTRE) == SCENARIO_MOTORE_1[-1]

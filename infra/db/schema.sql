@@ -13,3 +13,10 @@ CREATE TABLE misure (
 -- Hypertable: TimescaleDB divide la tabella in blocchi per tempo,
 -- così le query "ultima ora" restano veloci anche con milioni di righe.
 SELECT create_hypertable('misure', by_range('ts'));
+
+-- Utente per l'agente: può solo leggere, e ogni query si ferma dopo 5 secondi.
+-- Anche se il modello linguistico sbagliasse una query, non potrebbe cambiare né bloccare nulla.
+CREATE ROLE agente LOGIN PASSWORD 'agente';
+GRANT SELECT ON misure TO agente;
+ALTER ROLE agente SET statement_timeout = '5s';
+ALTER ROLE agente SET default_transaction_read_only = on;

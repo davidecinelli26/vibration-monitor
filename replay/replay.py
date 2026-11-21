@@ -40,6 +40,17 @@ REGISTRAZIONI = [
 ]
 
 
+# motore-1: una macchina che si guasta mentre la guardi. Parte sana e ogni FASE_FINESTRE
+# finestre (circa 2 minuti) passa alla registrazione successiva; poi resta sull'ultima.
+SCENARIO_MOTORE_1 = ["mafaulda-normale", "mafaulda-squilibrio-6g", "mafaulda-squilibrio-20g", "mafaulda-squilibrio-35g"]
+FASE_FINESTRE = 120
+
+
+def fase_motore_1(i: int) -> str:
+    """La registrazione che motore-1 riproduce alla finestra numero i."""
+    return SCENARIO_MOTORE_1[min(i // FASE_FINESTRE, len(SCENARIO_MOTORE_1) - 1)]
+
+
 def carica(percorso: Path, fs_originale: int) -> np.ndarray:
     """Legge un accelerometro della registrazione e lo porta a FS campioni al secondo."""
     if percorso.suffix == ".csv":
@@ -99,7 +110,8 @@ def main() -> None:
 
     i = 0
     while True:     # finite le finestre ricomincia da capo, come un sensore sempre acceso
-        for dispositivo, lista in finestre.items():
+        sorgenti = {**finestre, "motore-1": finestre[fase_motore_1(i)]}
+        for dispositivo, lista in sorgenti.items():
             testo = messaggio(dispositivo, *analizza(lista[i % len(lista)]))
             client.publish(f"vibrazioni/{dispositivo}", testo)
             print(testo)
