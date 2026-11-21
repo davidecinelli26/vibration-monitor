@@ -26,14 +26,20 @@ URL_EVAL_ADMIN = ADMIN_URL.rsplit("/", 1)[0] + "/" + DB_EVAL
 URL_EVAL_AGENTE = f"postgresql://agente:agente@127.0.0.1:5432/{DB_EVAL}"
 
 OLLAMA = "http://127.0.0.1:11434/v1"
+GROQ = "https://api.groq.com/openai/v1"
+GEMINI = "https://generativelanguage.googleapis.com/v1beta/openai/"
 # nome: (indirizzo, modello, variabile con la chiave)
 MODELLI = {
     "qwen2.5-7b":    (OLLAMA, "qwen2.5:7b", None),
     "qwen3-8b":      (OLLAMA, "qwen3:8b", None),
     "granite3.3-8b": (OLLAMA, "granite3.3:8b", None),
     "llama3.1-8b":   (OLLAMA, "llama3.1:8b", None),
-    "groq-llama3.3-70b": ("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
-    "gemini-flash":  ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-2.5-flash", "GEMINI_API_KEY"),
+    # in rete, piani gratuiti (elenco di novembre 2026: i servizi cambiano spesso i modelli disponibili)
+    "groq-gpt-oss-20b":  (GROQ, "openai/gpt-oss-20b", "GROQ_API_KEY"),
+    "groq-gpt-oss-120b": (GROQ, "openai/gpt-oss-120b", "GROQ_API_KEY"),
+    "groq-qwen3.8-27b":  (GROQ, "qwen/qwen3.8-27b", "GROQ_API_KEY"),
+    "gemini-flash-lite": (GEMINI, "gemini-flash-lite-latest", "GEMINI_API_KEY"),
+    "gemini-flash":      (GEMINI, "gemini-flash-latest", "GEMINI_API_KEY"),
 }
 
 # (dispositivo, (rms_g, picco_hz, picco_g, persi) da 65 a 5 minuti fa, lo stesso negli ultimi 5 minuti).
@@ -154,26 +160,33 @@ def main() -> None:
         secondi = (time.time() - inizio) / (len(DOMANDE) + len(DOMANDE_NUOVE))
         tabella.append((nome, usate, nuove, secondi))
 
-    print(f"\n{'modello':<20} {'domande usate':>14} {'domande nuove':>14} {'s/domanda':>10}")
-    for nome, (u_ok, u_tot), (n_ok, n_tot), secondi in tabella:
-        print(f"{nome:<20} {f'{u_ok}/{u_tot}':>14} {f'{n_ok}/{n_tot}':>14} {secondi:>10.0f}")
+    print(f"\n{'modello':<20} {'domande usate':>14} {'domande nuove':>14} {'s/domanda':>10} {'errori':>7}")
+    for nome, (u_ok, u_tot, u_err), (n_ok, n_tot, n_err), secondi in tabella:
+        print(f"{nome:<20} {f'{u_ok}/{u_tot}':>14} {f'{n_ok}/{n_tot}':>14} {secondi:>10.0f} {u_err + n_err:>7}")
 
 
-def valuta(domande) -> tuple[int, int]:
-    superati = totali = 0
+# alcuni modelli scrivono "motore‑1" con il trattino non divisibile, o usano spazi speciali
+TRATTINI_E_SPAZI = str.maketrans({"‐": "-", "‑": "-", "–": "-", " ": " ", " ": " "})
+
+
+def valuta(domande) -> tuple[int, int, int]:
+    superati = totali = errori = 0
     for domanda, controlli in domande:
         inizio = time.time()
         try:
-            testo = asyncio.run(chiedi(domanda))
+            testo = asyncio.run(chiedi(domanda)).translate(TRATTINI_E_SPAZI)
         except Exception as e:      # un modello che non sa usare gli strumenti non deve fermare il confronto
-            testo = f"ERRORE: {type(e).__name__}: {e}"
+            while isinstance(e, BaseExceptionGroup) and e.exceptions:
+                e = e.exceptions[0]                 # l'errore vero, non il contenitore di asyncio
+            testo = f"ERRORE: {type(e).__name__}: {str(e)[:300]}"
+            errori += 1
         print(f"\n### {domanda}  ({time.time() - inizio:.0f} s)\n{testo.strip()}\n")
         for descrizione, regola, deve_esserci in controlli + [PRECISIONE_FINTA]:
             ok = bool(re.search(regola, testo.lower())) == deve_esserci
             superati += ok
             totali += 1
             print(f"  {'OK  ' if ok else 'NO  '} {descrizione}")
-    return superati, totali
+    return superati, totali, errori
 
 
 if __name__ == "__main__":

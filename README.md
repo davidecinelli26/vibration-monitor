@@ -13,7 +13,9 @@ An ESP32 reads an MPU-6050 accelerometer 1000 times a second. Every 1024 samples
 
 The same pipeline can be fed without hardware. A replay program reads recordings of healthy and faulty machines from two public datasets (CWRU and MAFAULDA), reduces them to what the 1 kHz sensor would see, and publishes the same JSON on the same topics. That shows what a cheap sensor can and cannot detect. The answer turned out to be less obvious than expected; see [Results](#results).
 
-**Status: work in progress.** Next steps are an MCP agent that answers questions about the machines from the database, and a small model for the faults that two numbers cannot separate.
+An agent answers questions about the machines ("is anything behaving strangely?") through an MCP server with read-only tools on the database. It runs on a local model or a hosted one, and an evaluation measures how well each model does.
+
+**Status: work in progress.** Next step: a small on-device model (TinyML) for the faults that RMS and a single peak cannot separate.
 
 ## Author
 
@@ -23,8 +25,10 @@ The same pipeline can be fed without hardware. A replay program reads recordings
 
 ```text
 MPU-6050 ──I2C──► ESP32 ──WiFi/MQTT──► Mosquitto ──► ingestor (Python) ──► TimescaleDB ◄── Grafana
-                                           ▲
-             replay (Python, CWRU + MAFAULDA) ┘
+                                           ▲                                    ▲
+             replay (Python, CWRU + MAFAULDA) ┘                MCP server (read-only)
+                                                                                ▲
+                                                               agent (LLM, local or hosted)
 ```
 
 | Folder | What | Tools |
@@ -32,6 +36,7 @@ MPU-6050 ──I2C──► ESP32 ──WiFi/MQTT──► Mosquitto ──► i
 | [`firmware/`](firmware) | ESP32 firmware: sampling, analysis, MQTT | PlatformIO, Arduino core 3, FreeRTOS, Wokwi |
 | [`ingestor/`](ingestor) | MQTT → TimescaleDB | Python, paho-mqtt, psycopg, uv |
 | [`replay/`](replay) | publishes the public datasets as if they were sensors | Python, numpy, scipy, uv |
+| [`agente/`](agente) | MCP server, agent loop, evaluation | Python, MCP SDK, OpenAI-compatible client, Ollama |
 | [`infra/`](infra) | broker, database, dashboard | Docker Compose: Mosquitto, TimescaleDB, Grafana |
 
 The parts only talk through MQTT and SQL, so any of them can be swapped: the replay stands in for the board, and the board does not know who reads its data.
@@ -46,7 +51,16 @@ The parts only talk through MQTT and SQL, so any of them can be swapped: the rep
 
 ### Replay
 
-The replay applies the same analysis as the firmware (the tests check it gives the same numbers on the same signal). It sends one window per recording every 1.024 s and starts again when a recording ends.
+The replay applies the same analysis as the firmware (the tests check it gives the same numbers on the same signal). It sends one window per recording every 1.024 s and starts again when a recording ends. It also plays `motore-1`, a machine that breaks while you watch: healthy, then imbalance with 6, 20 and 35 g, about two minutes each.
+
+### Agent
+
+- **MCP server** ([`agente/server.py`](agente/server.py)) with three tools: `elenca_dispositivi` (machines and their last message), `stato` (one machine over time, at most 12 intervals) and `anomalie` (machines whose RMS in the last 5 minutes is at least 1.5 times the hour before, with a TimescaleDB query). Its instructions carry the domain rules, including what the sensor cannot see.
+- **Read-only by construction.** The server connects as a database role that has only `SELECT`, runs every transaction read-only and stops any query after 5 s. A wrong query from the model cannot change or block anything.
+- **Agent loop** ([`agente/agente.py`](agente/agente.py)): the model gets the question and the tools; when it asks for a tool, the loop runs it on the MCP server and sends the result back, for at most 8 steps. It talks the OpenAI-compatible API, so the same code runs on Ollama or on a hosted service.
+- **Evaluation** ([`agente/valutazione.py`](agente/valutazione.py)): a fixed scenario in its own database (one machine develops an imbalance, one sensor starts losing samples), 10 questions and regex checks on what each answer must and must not say. Four of the questions were never used to tune the instructions; their score is the honest one.
+
+Two things the evaluation taught, that held for every model: a long tool result pushed the instructions out of a small model's 4096-token context (so `stato` returns at most 12 rows), and a model given a parameter it could misuse did misuse it (so `anomalie` takes none).
 
 ## Run it
 
@@ -64,6 +78,12 @@ cd ../replay && uv run python scarica_dati.py && uv run python replay.py
 
 # 3b. or the firmware in the simulator: open firmware/ in VS Code,
 #     build with `pio run -e esp32`, then F1 → "Wokwi: Start Simulator"
+
+# 4. ask the agent (needs Ollama with `ollama pull qwen2.5:7b`)
+cd ../agente && uv run python agente.py "C'è qualche macchina che si sta comportando in modo strano?"
+
+# 5. compare models; hosted ones read their keys from agente/.env (never committed)
+uv run --env-file .env python valutazione.py qwen2.5-7b groq-gpt-oss-120b
 ```
 
 Then open the dashboard at http://localhost:3000/d/vibrazioni.
@@ -73,7 +93,8 @@ Tests:
 ```bash
 cd firmware && pio test -e native     # 11 tests: sensor decoding, analysis, JSON
 cd ingestor && uv run pytest -q       # 5 tests: message parsing
-cd replay && uv run pytest -q         # 7 tests: analysis, plus checks on the real data
+cd replay && uv run pytest -q         # 8 tests: analysis, checks on the real data, motore-1 scenario
+cd agente && uv run pytest -q         # 7 tests: MCP tools against a temporary table (needs the database)
 ```
 
 The passwords in `infra/` are for local development only. The database and Grafana listen on 127.0.0.1, and Grafana has no login.
@@ -107,6 +128,29 @@ At full bandwidth a faulty bearing vibrates 2 to 9 times more than a healthy one
 Imbalance shakes the shaft once per turn, so the peak sits at the rotation speed and grows with the added mass. Misalignment was not separable from the healthy machine with RMS and the 1×, 2× and 3× harmonics, on any of the three axes. That is the motivation for a model that looks at the whole spectrum.
 
 Two notes on MAFAULDA. The dataset page says 50 kHz, but the file names (the rotation speed) only match the tachometer pulses at 51.2 kHz. 51.2 kHz is also the rate of the NI 9234 board used to record it, so the replay uses 51.2 kHz; at 50 kHz every frequency would be 2% low. The page does not state the unit of the values, so they are used as they are; comparisons between recordings do not depend on it.
+
+### Agent: which model
+
+Free models only: four local ones on Ollama (laptop RTX 4050, 6 GB) and four on free hosted tiers (Groq, Google AI Studio), November 2026. One run each, temperature 0.
+
+| Model | Where | Tuning questions (25 checks) | Unseen questions (12 checks) | s / question |
+|---|---|---|---|---|
+| gpt-oss-120b | Groq | 25 | **12** | 34 |
+| gpt-oss-20b | Groq | 25 | 11 | 22 |
+| qwen3 8B | local | 25 | 10 | 94 |
+| gemini-flash-lite | Google | 25 | 10 ¹ | 6 |
+| qwen3.8 27B | Groq | 25 | 9 ¹ | 22 |
+| qwen2.5 7B | local | 25 | 8 | 7 |
+| llama3.1 8B | local | 25 | 6 | 10 |
+| granite3.3 8B | local | 14 | 8 | 19 |
+
+¹ One question lost to the free tier's rate limit (HTTP 429 / 413), counted as failed.
+
+How to read it:
+
+- The instructions were tuned on qwen2.5 7B with the tuning questions, so most models score full marks there. The unseen column is the one that compares models, and with 12 checks a difference of one or two is noise.
+- The question almost every model got wrong is "are there problems with the sensors?". No tool reports lost samples across machines, so the models answer from `anomalie`, which only looks at RMS. That is a missing tool, not a weak model.
+- Locally, qwen3 8B is the most accurate but its reasoning makes it about 13 times slower than qwen2.5 7B. Hosted, the 120B model is the only one with every check right; the free tiers' rate limits are the price.
 
 ## Data
 
