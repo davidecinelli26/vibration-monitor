@@ -1,0 +1,15 @@
+apiVersion: 1
+datasources:
+  - name: TimescaleDB
+    uid: timescaledb          # fisso: la dashboard lo cita per nome
+    type: grafana-postgresql-datasource
+    url: db:5432
+    user: vibrazioni
+    isDefault: true
+    secureJsonData:
+      password: vibrazioni
+    jsonData:
+      database: vibrazioni
+      sslmode: disable
+      timescaledb: true
+      postgresVersion: 1600

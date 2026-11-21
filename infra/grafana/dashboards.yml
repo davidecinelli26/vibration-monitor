@@ -1,0 +1,6 @@
+apiVersion: 1
+providers:
+  - name: vibrazioni
+    type: file
+    options:
+      path: /etc/grafana/dashboards     # carica ogni .json di questa cartella

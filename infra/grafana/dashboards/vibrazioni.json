@@ -1,0 +1,84 @@
+{
+  "uid": "vibrazioni",
+  "title": "Vibrazioni",
+  "time": { "from": "now-5m", "to": "now" },
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "name": "dispositivo",
+        "label": "Dispositivo",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+        "query": "SELECT DISTINCT dispositivo FROM misure ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "RMS",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 9 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+      "fieldConfig": { "defaults": { "unit": "g" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, dispositivo AS metric, rms_g FROM misure WHERE $__timeFilter(ts) AND dispositivo IN ($dispositivo) ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Ampiezza del picco",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 9 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+      "fieldConfig": { "defaults": { "unit": "g" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, dispositivo AS metric, picco_g FROM misure WHERE $__timeFilter(ts) AND dispositivo IN ($dispositivo) ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Frequenza del picco",
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 9 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+      "fieldConfig": {
+        "defaults": { "unit": "hertz", "custom": { "drawStyle": "points", "pointSize": 6 } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, dispositivo AS metric, picco_hz FROM misure WHERE $__timeFilter(ts) AND dispositivo IN ($dispositivo) ORDER BY ts"
+        }
+      ]
+    }
+  ]
+}
