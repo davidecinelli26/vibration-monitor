@@ -21,15 +21,17 @@ DB_EVAL = "vibrazioni_eval"
 URL_EVAL_ADMIN = ADMIN_URL.rsplit("/", 1)[0] + "/" + DB_EVAL
 URL_EVAL_AGENTE = f"postgresql://agente:agente@127.0.0.1:5432/{DB_EVAL}"
 
-# (dispositivo, rms_g, picco_hz, picco_g) da 65 a 5 minuti fa, e poi negli ultimi 5 minuti.
+# (dispositivo, (rms_g, picco_hz, picco_g, persi) da 65 a 5 minuti fa, lo stesso negli ultimi 5 minuti).
 # motore-1 sviluppa uno squilibrio: RMS da 0,168 a 0,52 con il picco fermo a circa 29,5 Hz
-# (valori misurati sulle registrazioni MAFAULDA). Le altre macchine non cambiano.
+# (valori misurati sulle registrazioni MAFAULDA). motore-2 vibra normalmente, ma il suo sensore
+# comincia a perdere campioni. Le altre macchine non cambiano.
 SCENARIO = [
-    ("motore-1",                      (0.168, 29.3, 0.150), (0.520, 29.3, 0.665)),
-    ("mafaulda-normale",              (0.168, 29.3, 0.150), (0.168, 29.3, 0.150)),
-    ("mafaulda-disallineamento-oriz", (0.136, 29.3, 0.140), (0.136, 29.3, 0.140)),
-    ("cwru-anello-interno",           (0.026, None, None),  (0.026, None, None)),
-    ("cwru-normale",                  (0.021, None, None),  (0.021, None, None)),
+    ("motore-1",                      (0.168, 29.3, 0.150, 0), (0.520, 29.3, 0.665, 0)),
+    ("motore-2",                      (0.170, 29.3, 0.150, 0), (0.171, 29.3, 0.152, 37)),
+    ("mafaulda-normale",              (0.168, 29.3, 0.150, 0), (0.168, 29.3, 0.150, 0)),
+    ("mafaulda-disallineamento-oriz", (0.136, 29.3, 0.140, 0), (0.136, 29.3, 0.140, 0)),
+    ("cwru-anello-interno",           (0.026, None, None, 0),  (0.026, None, None, 0)),
+    ("cwru-normale",                  (0.021, None, None, 0),  (0.021, None, None, 0)),
 ]
 
 # (domanda, controlli). Un controllo è (descrizione, espressione regolare, deve_esserci).
@@ -66,6 +68,28 @@ DOMANDE = [
     ]),
 ]
 
+# Domande mai usate per migliorare le istruzioni: il loro punteggio è quello onesto.
+# Se le istruzioni vengono cambiate guardando queste risposte, servono domande nuove.
+DOMANDE_NUOVE = [
+    ("Quale macchina vibra di più in questo momento?", [
+        ("indica motore-1", r"motore-1", True),
+        ("cita il suo RMS (circa 0,52)", r"0[.,]5[12]", True),
+    ]),
+    ("Ci sono problemi con i sensori?", [
+        ("indica motore-2", r"motore-2", True),
+        ("parla di campioni persi", r"(pers|campion)", True),
+    ]),
+    ("Com'è messo il motore-9?", [
+        ("dice che non ci sono dati",
+         r"(non (esiste|risulta|trov|ci sono|ho|è present|compare|sono stat)|nessun[ao]? (dat|misur|macchin))", True),
+        ("non inventa valori", r"0[.,]\d+ ?g", False),
+    ]),
+    ("Devo fermare il motore-1?", [
+        ("parla di squilibrio", r"squilibri", True),
+        ("consiglia un controllo", r"(controll|verific|ispezion|manutenzion|bilanci)", True),
+    ]),
+]
+
 # Su tutte le risposte: frequenze con più decimali di quanti la FFT ne possa dare (risoluzione ~1 Hz).
 PRECISIONE_FINTA = ("niente frequenze con 3+ decimali", r"\d+[.,]\d{3,} ?hz", False)
 
@@ -85,7 +109,7 @@ def prepara_scenario() -> None:
                 righe = [(s, dispositivo, *(ora if s < 300 else prima))
                          for s in range(0, 65 * 60, 10)]          # una misura ogni 10 s, per 65 minuti
                 cur.executemany(
-                    "INSERT INTO misure VALUES (now() - %s * interval '1 second', %s, %s, %s, %s, 0, 0)", righe)
+                    "INSERT INTO misure VALUES (now() - %s * interval '1 second', %s, %s, %s, %s, %s, 0)", righe)
 
 
 async def chiedi(domanda: str) -> str:
@@ -102,8 +126,16 @@ def main() -> None:
     prepara_scenario()
     os.environ["DB_URL"] = URL_EVAL_AGENTE
 
+    punteggi = {nome: valuta(domande) for nome, domande in
+                [("domande usate per le istruzioni", DOMANDE), ("domande nuove", DOMANDE_NUOVE)]}
+    print()
+    for nome, (superati, totali) in punteggi.items():
+        print(f"Punteggio, {nome}: {superati}/{totali}")
+
+
+def valuta(domande) -> tuple[int, int]:
     superati = totali = 0
-    for domanda, controlli in DOMANDE:
+    for domanda, controlli in domande:
         inizio = time.time()
         testo = asyncio.run(chiedi(domanda))
         print(f"\n### {domanda}  ({time.time() - inizio:.0f} s)\n{testo.strip()}\n")
@@ -112,7 +144,7 @@ def main() -> None:
             superati += ok
             totali += 1
             print(f"  {'OK  ' if ok else 'NO  '} {descrizione}")
-    print(f"\nPunteggio: {superati}/{totali} controlli superati")
+    return superati, totali
 
 
 if __name__ == "__main__":
