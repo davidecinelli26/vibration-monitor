@@ -26,7 +26,7 @@
       "title": "RMS",
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 9 },
       "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
-      "fieldConfig": { "defaults": { "unit": "g" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "g", "custom": { "spanNulls": true } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
       "targets": [
         {
@@ -45,7 +45,7 @@
       "title": "Ampiezza del picco",
       "gridPos": { "x": 0, "y": 9, "w": 24, "h": 9 },
       "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
-      "fieldConfig": { "defaults": { "unit": "g" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "g", "custom": { "spanNulls": true } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
       "targets": [
         {

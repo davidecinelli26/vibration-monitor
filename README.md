@@ -5,6 +5,9 @@
 ![ESP32](https://img.shields.io/badge/ESP32-Arduino%20%2B%20FreeRTOS-2a9d8f)
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-264653)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-457b9d)
+[![MIT](https://img.shields.io/badge/license-MIT-264653)](LICENSE)
+
+![Grafana dashboard: RMS, peak amplitude and peak frequency of the replayed CWRU and MAFAULDA recordings](docs/dashboard.png)
 
 An ESP32 reads an MPU-6050 accelerometer 1000 times a second. Every 1024 samples it computes the RMS and the spectrum of the vibration, and it publishes one small JSON message over MQTT. A Python service stores the messages in TimescaleDB, and Grafana plots them.
 
