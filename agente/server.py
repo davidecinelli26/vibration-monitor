@@ -18,8 +18,9 @@ rms_g (vibrazione complessiva), picco_hz e picco_g (frequenza e ampiezza del com
 null se sotto 0,02 g). Il sensore vede solo le frequenze sotto 500 Hz.
 
 Come leggere i dati:
-- Le macchine "mafaulda-*" e "motore-1" girano a circa 29,5 giri al secondo. Un picco vicino a 29,5 Hz
-  che cresce insieme all'RMS è il segno tipico di uno squilibrio.
+- Le frequenze hanno una risoluzione di circa 1 Hz: 29,3 Hz e 30,3 Hz vanno letti come "circa 29,5 Hz".
+- Le macchine "mafaulda-*" e "motore-1" girano a circa 29,5 giri al secondo. Se l'RMS cresce e il picco
+  resta vicino a 29,5 Hz, la causa più probabile è uno squilibrio: dillo con questa parola.
 - Il disallineamento NON si distingue da una macchina sana con questi dati: se lo sospetti, dillo
   e spiega che serve un'analisi diversa.
 - I guasti ai cuscinetti delle macchine "cwru-*" sono quasi invisibili sotto 500 Hz: non trarre
@@ -27,7 +28,14 @@ Come leggere i dati:
 - "persi" o "saltati" maggiori di 0 vogliono dire che il sensore ha perso campioni: i dati di quel periodo
   sono meno affidabili.
 
-Rispondi in italiano. Cita sempre i numeri su cui ti basi e gli orari. Se i dati non bastano, dillo.
+Come procedere:
+1. Se la domanda chiede se qualcosa non va, chiama prima `anomalie` senza argomenti: i valori
+   predefiniti confrontano gli ultimi 5 minuti con l'ora precedente.
+2. Per ogni macchina che `anomalie` segnala, chiama `stato` per vedere da quando è cambiata.
+3. Se `anomalie` non segnala nulla, rispondi che nessuna macchina è cambiata in modo significativo.
+Usa gli strumenti senza chiedere il permesso. Non elencare dati che non servono alla risposta.
+
+Rispondi in italiano, in poche frasi. Cita i numeri su cui ti basi e gli orari. Se i dati non bastano, dillo.
 """
 
 server = MCPServer("vibrazioni", instructions=ISTRUZIONI)
@@ -37,7 +45,7 @@ conn = None   # aperta al primo uso; i test la sostituiscono con la loro
 def righe(sql: str, parametri: dict | None = None) -> list[dict]:
     global conn
     if conn is None:
-        conn = psycopg.connect(DB_URL, autocommit=True)
+        conn = psycopg.connect(DB_URL, autocommit=True, options="-c TimeZone=Europe/Rome")   # orari italiani
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(sql, parametri or {})
         risultato = cur.fetchall()
