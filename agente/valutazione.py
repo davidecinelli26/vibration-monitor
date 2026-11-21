@@ -1,10 +1,14 @@
 """Misura l'agente: domande fisse su uno scenario fisso, e controlli su cosa la risposta deve contenere.
 
-Avvio:  uv run python valutazione.py
+Avvio:  uv run --env-file .env python valutazione.py [modello ...]
+        (i nomi sono le chiavi di MODELLI; senza nomi usa qwen2.5-7b)
 
-Lo scenario sta in un database a parte (vibrazioni_eval), ricreato a ogni avvio con orari relativi
+Lo scenario sta in un database a parte (vibrazioni_eval), ricreato per ogni modello con orari relativi
 a "adesso": il database delle misure vere non viene toccato, e i risultati si possono confrontare
 tra un avvio e l'altro, cambiando istruzioni o modello.
+
+I modelli in rete vogliono una chiave, letta dalla variabile indicata in MODELLI. Con
+`--env-file .env` uv le legge dal file agente/.env, che non va mai nel repository.
 """
 import asyncio
 import contextlib
@@ -20,6 +24,17 @@ ADMIN_URL = os.getenv("ADMIN_URL", "postgresql://vibrazioni:vibrazioni@127.0.0.1
 DB_EVAL = "vibrazioni_eval"
 URL_EVAL_ADMIN = ADMIN_URL.rsplit("/", 1)[0] + "/" + DB_EVAL
 URL_EVAL_AGENTE = f"postgresql://agente:agente@127.0.0.1:5432/{DB_EVAL}"
+
+OLLAMA = "http://127.0.0.1:11434/v1"
+# nome: (indirizzo, modello, variabile con la chiave)
+MODELLI = {
+    "qwen2.5-7b":    (OLLAMA, "qwen2.5:7b", None),
+    "qwen3-8b":      (OLLAMA, "qwen3:8b", None),
+    "granite3.3-8b": (OLLAMA, "granite3.3:8b", None),
+    "llama3.1-8b":   (OLLAMA, "llama3.1:8b", None),
+    "groq-llama3.3-70b": ("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+    "gemini-flash":  ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-2.5-flash", "GEMINI_API_KEY"),
+}
 
 # (dispositivo, (rms_g, picco_hz, picco_g, persi) da 65 a 5 minuti fa, lo stesso negli ultimi 5 minuti).
 # motore-1 sviluppa uno squilibrio: RMS da 0,168 a 0,52 con il picco fermo a circa 29,5 Hz
@@ -123,21 +138,35 @@ async def chiedi(domanda: str) -> str:
 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
-    prepara_scenario()
     os.environ["DB_URL"] = URL_EVAL_AGENTE
+    tabella = []
+    for nome in sys.argv[1:] or ["qwen2.5-7b"]:
+        url, modello, variabile_chiave = MODELLI[nome]
+        if variabile_chiave and not os.getenv(variabile_chiave):
+            print(f"\n{nome}: salto, manca la variabile {variabile_chiave}")
+            continue
+        os.environ.update(LLM_URL=url, LLM_MODELLO=modello,
+                          LLM_CHIAVE=os.getenv(variabile_chiave or "", "ollama"))
+        prepara_scenario()      # per ogni modello: gli orari sono relativi a "adesso"
+        print(f"\n======== {nome} ========")
+        inizio = time.time()
+        usate, nuove = valuta(DOMANDE), valuta(DOMANDE_NUOVE)
+        secondi = (time.time() - inizio) / (len(DOMANDE) + len(DOMANDE_NUOVE))
+        tabella.append((nome, usate, nuove, secondi))
 
-    punteggi = {nome: valuta(domande) for nome, domande in
-                [("domande usate per le istruzioni", DOMANDE), ("domande nuove", DOMANDE_NUOVE)]}
-    print()
-    for nome, (superati, totali) in punteggi.items():
-        print(f"Punteggio, {nome}: {superati}/{totali}")
+    print(f"\n{'modello':<20} {'domande usate':>14} {'domande nuove':>14} {'s/domanda':>10}")
+    for nome, (u_ok, u_tot), (n_ok, n_tot), secondi in tabella:
+        print(f"{nome:<20} {f'{u_ok}/{u_tot}':>14} {f'{n_ok}/{n_tot}':>14} {secondi:>10.0f}")
 
 
 def valuta(domande) -> tuple[int, int]:
     superati = totali = 0
     for domanda, controlli in domande:
         inizio = time.time()
-        testo = asyncio.run(chiedi(domanda))
+        try:
+            testo = asyncio.run(chiedi(domanda))
+        except Exception as e:      # un modello che non sa usare gli strumenti non deve fermare il confronto
+            testo = f"ERRORE: {type(e).__name__}: {e}"
         print(f"\n### {domanda}  ({time.time() - inizio:.0f} s)\n{testo.strip()}\n")
         for descrizione, regola, deve_esserci in controlli + [PRECISIONE_FINTA]:
             ok = bool(re.search(regola, testo.lower())) == deve_esserci
