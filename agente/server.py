@@ -21,19 +21,22 @@ Come leggere i dati:
 - Le frequenze hanno una risoluzione di circa 1 Hz: 29,3 Hz e 30,3 Hz vanno letti come "circa 29,5 Hz".
 - Le macchine "mafaulda-*" e "motore-1" girano a circa 29,5 giri al secondo. Se l'RMS cresce e il picco
   resta vicino a 29,5 Hz, la causa più probabile è uno squilibrio: dillo con questa parola.
-- Il disallineamento NON si distingue da una macchina sana con questi dati: se lo sospetti, dillo
-  e spiega che serve un'analisi diversa.
+- Il disallineamento NON si distingue da una macchina sana con questi dati. Non dire mai che una
+  macchina ha o non ha un disallineamento: di' che con questo sensore non si può stabilire.
 - I guasti ai cuscinetti delle macchine "cwru-*" sono quasi invisibili sotto 500 Hz: non trarre
   conclusioni dalle loro piccole differenze.
 - "persi" o "saltati" maggiori di 0 vogliono dire che il sensore ha perso campioni: i dati di quel periodo
   sono meno affidabili.
 
-Come procedere:
-1. Se la domanda chiede se qualcosa non va, chiama prima `anomalie` senza argomenti: i valori
-   predefiniti confrontano gli ultimi 5 minuti con l'ora precedente.
-2. Per ogni macchina che `anomalie` segnala, chiama `stato` per vedere da quando è cambiata.
-3. Se `anomalie` non segnala nulla, rispondi che nessuna macchina è cambiata in modo significativo.
-Usa gli strumenti senza chiedere il permesso. Non elencare dati che non servono alla risposta.
+Come procedere, secondo la domanda:
+- "Quali macchine ci sono?": chiama `elenca_dispositivi` e nominale tutte.
+- Una domanda generale ("qualcosa non va?"): chiama `anomalie` (confronta gli ultimi 5 minuti con
+  l'ora prima), poi `stato` sulle macchine che segnala. Se non segnala nulla, dillo.
+- Una domanda su una macchina precisa: chiama `stato` su quella macchina con minuti=60 e guarda
+  quando e quanto è cambiato l'RMS.
+- Una domanda su un tipo di guasto: prima di guardare i dati, controlla nelle regole qui sopra se
+  quel guasto si può vedere con questo sensore. Se non si può, dillo come prima cosa.
+Rispondi solo alla domanda fatta. Usa gli strumenti senza chiedere il permesso.
 
 Rispondi in italiano, in poche frasi. Cita i numeri su cui ti basi e gli orari. Se i dati non bastano, dillo.
 """
@@ -69,17 +72,19 @@ def elenca_dispositivi() -> list[dict]:
 
 @server.tool()
 def stato(dispositivo: str, minuti: int = 10) -> list[dict]:
-    """Andamento di una macchina negli ultimi `minuti`, un valore medio per minuto:
-    rms_g, picco_hz, picco_g, e quanti campioni il sensore ha perso."""
+    """Andamento di una macchina negli ultimi `minuti`, in al massimo 12 intervalli:
+    per ognuno rms_g, picco_hz, picco_g medi e quanti campioni il sensore ha perso."""
+    # al massimo 12 righe: un risultato lungo riempirebbe il contesto del modello e gli farebbe
+    # perdere le istruzioni
     return righe("""
-        SELECT time_bucket('1 minute', ts) AS minuto,
+        SELECT time_bucket(make_interval(mins => %(passo)s), ts) AS da,
                count(*) AS misure,
                avg(rms_g) AS rms_g, avg(picco_hz) AS picco_hz, avg(picco_g) AS picco_g,
                max(persi) AS persi, max(saltati) AS saltati
         FROM misure
         WHERE dispositivo = %(dispositivo)s AND ts > now() - make_interval(mins => %(minuti)s)
-        GROUP BY minuto ORDER BY minuto
-    """, {"dispositivo": dispositivo, "minuti": minuti})
+        GROUP BY da ORDER BY da
+    """, {"dispositivo": dispositivo, "minuti": minuti, "passo": max(1, -(-minuti // 12))})
 
 
 QUERY_ANOMALIE = """
@@ -102,10 +107,15 @@ QUERY_ANOMALIE = """
 """
 
 
-@server.tool()
-def anomalie(minuti: int = 5, soglia: float = 1.5) -> list[dict]:
-    """Macchine che negli ultimi `minuti` vibrano almeno `soglia` volte più della loro ora precedente."""
+def trova_anomalie(minuti: int, soglia: float) -> list[dict]:
     return righe(QUERY_ANOMALIE, {"minuti": minuti, "soglia": soglia})
+
+
+@server.tool()
+def anomalie() -> list[dict]:
+    """Macchine che negli ultimi 5 minuti vibrano almeno 1,5 volte più della loro ora precedente."""
+    # parametri fissi: lasciati al modello, li cambiava (es. 60 minuti) e il confronto non trovava più nulla
+    return trova_anomalie(minuti=5, soglia=1.5)
 
 
 if __name__ == "__main__":

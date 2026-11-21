@@ -39,7 +39,8 @@ def testo_risultato(risultato) -> str:
 
 async def rispondi(domanda: str) -> str:
     server = StdioServerParameters(
-        command=sys.executable, args=[str(Path(__file__).with_name("server.py"))])
+        command=sys.executable, args=[str(Path(__file__).with_name("server.py"))],
+        env=dict(os.environ))   # senza, il client MCP passa al server solo poche variabili (niente DB_URL)
     async with stdio_client(server) as (r, w), ClientSession(r, w) as sessione:
         info = await sessione.initialize()
         strumenti = strumenti_per_ollama((await sessione.list_tools()).tools)
