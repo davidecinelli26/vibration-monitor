@@ -61,7 +61,7 @@ void IRAM_ATTR ogni_ms() {
 void task_lettore(void *) {
     uint32_t n = 0;
     for (;;) {
-        /* Una sola chiamata: dorme finché il timer non suona, poi dice QUANTE volte ha suonato. */
+        /* attende il timer; più di una notifica vuol dire tick arrivati mentre leggeva */
         uint32_t notifiche = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (notifiche > 1) {
             saltati = saltati + (notifiche - 1);

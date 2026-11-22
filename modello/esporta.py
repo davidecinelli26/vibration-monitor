@@ -23,11 +23,11 @@ FIRMWARE = Path(__file__).parent.parent / "firmware"
 LIMITE = 6.0
 
 
-def c(v) -> str:
+def in_c(v) -> str:
     """Numeri come inizializzatore C: {1.5f, -2f, ...}, anche annidati."""
     if np.ndim(v) == 0:
         return f"{float(v):.8e}f"
-    return "{" + ", ".join(c(x) for x in v) + "}"
+    return "{" + ", ".join(in_c(x) for x in v) + "}"
 
 
 def main() -> None:
@@ -54,13 +54,13 @@ def main() -> None:
 #define N_CARATTERISTICHE {n_car}
 #define N_CLASSI {n_classi}
 #define SCONOSCIUTA N_CLASSI
-#define LIMITE {c(LIMITE)}
+#define LIMITE {in_c(LIMITE)}
 
 static const char *const NOMI_CLASSI[N_CLASSI + 1] = {{{", ".join(f'"{n}"' for n in CLASSI)}, "sconosciuta"}};
-static const float MEDIA[N_CARATTERISTICHE] = {c(scala.mean_)};
-static const float SCALA[N_CARATTERISTICHE] = {c(scala.scale_)};
-static const float PESI[N_CLASSI][N_CARATTERISTICHE] = {c(logistica.coef_)};
-static const float BIAS[N_CLASSI] = {c(logistica.intercept_)};
+static const float MEDIA[N_CARATTERISTICHE] = {in_c(scala.mean_)};
+static const float SCALA[N_CARATTERISTICHE] = {in_c(scala.scale_)};
+static const float PESI[N_CLASSI][N_CARATTERISTICHE] = {in_c(logistica.coef_)};
+static const float BIAS[N_CLASSI] = {in_c(logistica.intercept_)};
 """, encoding="utf-8")
 
     # una finestra per classe: la prima di ogni classe
@@ -72,9 +72,9 @@ static const float BIAS[N_CLASSI] = {c(logistica.intercept_)};
         esempi.append((i, f.name, w, car, modello.predict_proba([car])[0]))
     blocchi = "\n".join(f"""\
     /* {nome} */
-    {{{classe}, {c(w)},
-     {c(car)},
-     {c(prob)}}},""" for classe, nome, w, car, prob in esempi)
+    {{{classe}, {in_c(w)},
+     {in_c(car)},
+     {in_c(prob)}}},""" for classe, nome, w, car, prob in esempi)
     (FIRMWARE / "test" / "test_classificatore" / "esempi.h").write_text(f"""\
 #pragma once
 /* Generato da modello/esporta.py: finestre MAFAULDA e quello che ne calcola il Python. */

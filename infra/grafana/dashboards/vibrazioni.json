@@ -1,7 +1,10 @@
 {
   "uid": "vibrazioni",
   "title": "Vibrazioni",
-  "time": { "from": "now-5m", "to": "now" },
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
   "refresh": "5s",
   "schemaVersion": 39,
   "templating": {
@@ -10,28 +13,139 @@
         "name": "dispositivo",
         "label": "Dispositivo",
         "type": "query",
-        "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "timescaledb"
+        },
         "query": "SELECT DISTINCT dispositivo FROM misure ORDER BY 1",
         "refresh": 2,
         "multi": true,
         "includeAll": true,
-        "current": { "text": "All", "value": "$__all" }
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
       }
     ]
   },
   "panels": [
     {
-      "id": 1,
-      "type": "timeseries",
-      "title": "RMS",
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 9 },
-      "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
-      "fieldConfig": { "defaults": { "unit": "g", "custom": { "spanNulls": true } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
+      "id": 4,
+      "type": "state-timeline",
+      "title": "Classe (classificatore sulla scheda)",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "normale",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "squilibrio",
+                  "color": "red",
+                  "index": 1
+                },
+                "2": {
+                  "text": "disallineamento",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "sconosciuta",
+                  "color": "text",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, dispositivo AS metric, CASE classe WHEN 'normale' THEN 0 WHEN 'squilibrio' THEN 1 WHEN 'disallineamento' THEN 2 WHEN 'sconosciuta' THEN 3 END AS classe FROM misure WHERE $__timeFilter(ts) AND dispositivo IN ($dispositivo) ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "RMS",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "g",
+          "custom": {
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
@@ -43,14 +157,41 @@
       "id": 2,
       "type": "timeseries",
       "title": "Ampiezza del picco",
-      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 9 },
-      "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
-      "fieldConfig": { "defaults": { "unit": "g", "custom": { "spanNulls": true } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "g",
+          "custom": {
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean"
+          ]
+        }
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
@@ -62,21 +203,93 @@
       "id": 3,
       "type": "timeseries",
       "title": "Frequenza del picco",
-      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 9 },
-      "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "hertz", "custom": { "drawStyle": "points", "pointSize": 6 } },
+        "defaults": {
+          "unit": "hertz",
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6
+          }
+        },
         "overrides": []
       },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean"] } },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean"
+          ]
+        }
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "grafana-postgresql-datasource", "uid": "timescaledb" },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
           "rawSql": "SELECT ts AS time, dispositivo AS metric, picco_hz FROM misure WHERE $__timeFilter(ts) AND dispositivo IN ($dispositivo) ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Campioni persi + tick saltati (contatori della scheda)",
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "timescaledb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "custom": {
+            "lineInterpolation": "stepAfter"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "timescaledb"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, dispositivo AS metric, persi + saltati AS campioni FROM misure WHERE $__timeFilter(ts) AND dispositivo IN ($dispositivo) ORDER BY ts"
         }
       ]
     }

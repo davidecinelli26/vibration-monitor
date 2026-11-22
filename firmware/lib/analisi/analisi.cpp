@@ -2,6 +2,7 @@
 #include <math.h>
 
 static const float DUE_PI = 6.28318531f;
+static const int BANDE = 16;
 
 float media(const float *x, int n) {
     float sum = 0;
@@ -82,10 +83,11 @@ void energia_bande(const float *x, int n, float *re, float *im, float *car) {
         im[i] = 0;
     }
     fft(re, im, n);
-    for (int b = 0; b < 16; b++) car[b] = 0;
+    int bin_per_banda = n / 2 / BANDE;
+    for (int b = 0; b < BANDE; b++) car[b] = 0;
     for (int k = 1; k <= n / 2; k++) {
-        car[(k - 1) / 32] += re[k] * re[k] + im[k] * im[k];
+        car[(k - 1) / bin_per_banda] += re[k] * re[k] + im[k] * im[k];
     }
-    for (int b = 0; b < 16; b++) car[b] = log10f(car[b] + 1e-12f);
-    car[16] = log10f(somma_quadrati / n + 1e-12f);
+    for (int b = 0; b < BANDE; b++) car[b] = log10f(car[b] + 1e-12f);
+    car[BANDE] = log10f(somma_quadrati / n + 1e-12f);
 }

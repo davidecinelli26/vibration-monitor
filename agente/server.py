@@ -1,6 +1,6 @@
 """Server MCP: dà a un modello linguistico strumenti in sola lettura sulle misure di vibrazione.
 
-Avvio (lo fa il client MCP, non tu):  uv run python server.py
+Non si avvia a mano: lo lancia agente.py come sottoprocesso e gli parla via stdio.
 """
 import os
 from datetime import datetime
@@ -119,7 +119,7 @@ def trova_anomalie(minuti: int, soglia: float) -> list[dict]:
 @server.tool()
 def anomalie() -> list[dict]:
     """Macchine che negli ultimi 5 minuti vibrano almeno 1,5 volte più della loro ora precedente."""
-    # parametri fissi: lasciati al modello, li cambiava (es. 60 minuti) e il confronto non trovava più nulla
+    # parametri fissi: quando poteva sceglierli, il modello usava 60 minuti e il confronto non trovava nulla
     return trova_anomalie(minuti=5, soglia=1.5)
 
 

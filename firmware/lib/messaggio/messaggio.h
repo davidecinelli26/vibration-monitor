@@ -5,8 +5,8 @@
 /* Riassunto di una finestra di campioni. */
 struct Misura {
     float    rms_g;      /* quanto vibra */
-    float    picco_hz;   /* frequenza del cassetto più alto */
-    float    picco_g;    /* ampiezza di quel cassetto */
+    float    picco_hz;   /* frequenza del bin più alto */
+    float    picco_g;    /* ampiezza di quel bin */
     uint32_t persi;
     uint32_t saltati;
     const char *classe;      /* cosa dice il classificatore */

@@ -7,7 +7,7 @@
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-457b9d)
 [![MIT](https://img.shields.io/badge/license-MIT-264653)](LICENSE)
 
-![Grafana dashboard: RMS, peak amplitude and peak frequency of the replayed CWRU and MAFAULDA recordings](docs/dashboard.png)
+![Grafana dashboard: class from the on-device classifier, RMS and peak of the replayed CWRU and MAFAULDA recordings; motore-1 turns from healthy to imbalance](docs/dashboard.png)
 
 An ESP32 reads an MPU-6050 accelerometer 1000 times a second. Every 1024 samples it computes the RMS and the spectrum of the vibration, runs a small classifier (healthy, imbalance, misalignment, or unknown), and it publishes one small JSON message over MQTT. A Python service stores the messages in TimescaleDB, and Grafana plots them.
 
@@ -88,7 +88,7 @@ cd ../agente && uv run python agente.py "C'è qualche macchina che si sta compor
 uv run --env-file .env python valutazione.py qwen2.5-7b groq-gpt-oss-120b
 ```
 
-Then open the dashboard at http://localhost:3000/d/vibrazioni.
+Then open the dashboard at http://localhost:3000/d/vibrazioni: the class of each machine over time, RMS, peak amplitude and frequency, and the board's lost-sample counters.
 
 To retrain the classifier after changing the features: `cd modello && uv run python studio.py` (cross-validation) and `uv run python esporta.py` (writes `firmware/lib/classificatore/modello.h` and the test examples).
 

@@ -122,6 +122,9 @@ DOMANDE_NUOVE = [
 # Su tutte le risposte: frequenze con più decimali di quanti la FFT ne possa dare (risoluzione ~1 Hz).
 PRECISIONE_FINTA = ("niente frequenze con 3+ decimali", r"\d+[.,]\d{3,} ?hz", False)
 
+# alcuni modelli scrivono "motore‑1" con il trattino non divisibile, o usano spazi speciali
+TRATTINI_E_SPAZI = str.maketrans({"‐": "-", "‑": "-", "–": "-", " ": " ", " ": " "})
+
 
 def prepara_scenario() -> None:
     with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
@@ -151,6 +154,26 @@ async def chiedi(domanda: str) -> str:
     return stampa.getvalue() + "\n" + (risposta or "")
 
 
+def valuta(domande) -> tuple[int, int, int]:
+    superati = totali = errori = 0
+    for domanda, controlli in domande:
+        inizio = time.time()
+        try:
+            testo = asyncio.run(chiedi(domanda)).translate(TRATTINI_E_SPAZI)
+        except Exception as e:      # un modello che non sa usare gli strumenti non deve fermare il confronto
+            while isinstance(e, BaseExceptionGroup) and e.exceptions:
+                e = e.exceptions[0]                 # l'errore vero, non il contenitore di asyncio
+            testo = f"ERRORE: {type(e).__name__}: {str(e)[:300]}"
+            errori += 1
+        print(f"\n### {domanda}  ({time.time() - inizio:.0f} s)\n{testo.strip()}\n")
+        for descrizione, regola, deve_esserci in controlli + [PRECISIONE_FINTA]:
+            ok = bool(re.search(regola, testo.lower())) == deve_esserci
+            superati += ok
+            totali += 1
+            print(f"  {'OK  ' if ok else 'NO  '} {descrizione}")
+    return superati, totali, errori
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     os.environ["DB_URL"] = URL_EVAL_AGENTE
@@ -172,30 +195,6 @@ def main() -> None:
     print(f"\n{'modello':<20} {'domande usate':>14} {'domande nuove':>14} {'s/domanda':>10} {'errori':>7}")
     for nome, (u_ok, u_tot, u_err), (n_ok, n_tot, n_err), secondi in tabella:
         print(f"{nome:<20} {f'{u_ok}/{u_tot}':>14} {f'{n_ok}/{n_tot}':>14} {secondi:>10.0f} {u_err + n_err:>7}")
-
-
-# alcuni modelli scrivono "motore‑1" con il trattino non divisibile, o usano spazi speciali
-TRATTINI_E_SPAZI = str.maketrans({"‐": "-", "‑": "-", "–": "-", " ": " ", " ": " "})
-
-
-def valuta(domande) -> tuple[int, int, int]:
-    superati = totali = errori = 0
-    for domanda, controlli in domande:
-        inizio = time.time()
-        try:
-            testo = asyncio.run(chiedi(domanda)).translate(TRATTINI_E_SPAZI)
-        except Exception as e:      # un modello che non sa usare gli strumenti non deve fermare il confronto
-            while isinstance(e, BaseExceptionGroup) and e.exceptions:
-                e = e.exceptions[0]                 # l'errore vero, non il contenitore di asyncio
-            testo = f"ERRORE: {type(e).__name__}: {str(e)[:300]}"
-            errori += 1
-        print(f"\n### {domanda}  ({time.time() - inizio:.0f} s)\n{testo.strip()}\n")
-        for descrizione, regola, deve_esserci in controlli + [PRECISIONE_FINTA]:
-            ok = bool(re.search(regola, testo.lower())) == deve_esserci
-            superati += ok
-            totali += 1
-            print(f"  {'OK  ' if ok else 'NO  '} {descrizione}")
-    return superati, totali, errori
 
 
 if __name__ == "__main__":

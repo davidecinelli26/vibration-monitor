@@ -1,7 +1,6 @@
 """Riproduce le registrazioni CWRU e MAFAULDA come se fossero ESP32: stesso calcolo, stesso JSON, stesso topic.
 
-Avvio:  uv run python replay.py
-I file .mat vanno in dati/ (non sono nel repository: si scaricano da engineering.case.edu).
+Avvio:  uv run python replay.py   (prima, una volta: uv run python scarica_dati.py)
 """
 import json
 import os
@@ -18,7 +17,7 @@ FS = 1000                 # come l'MPU-6050: 1000 campioni al secondo
 N = 1024                  # campioni per finestra, come il firmware
 SOGLIA_PICCO_G = 0.02     # come SOGLIA_PICCO_G nel firmware
 DATI = Path(__file__).parent / "dati"
-MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORTA = int(os.getenv("MQTT_PORTA", "1883"))
 MODELLO_H = Path(__file__).parent.parent / "firmware" / "lib" / "classificatore" / "modello.h"
 
@@ -63,8 +62,8 @@ def carica(percorso: Path, fs_originale: int) -> np.ndarray:
         mat = scipy.io.loadmat(percorso)
         chiave = next(k for k in mat if k.endswith("_DE_time"))   # CWRU, in g
         x = mat[chiave].ravel()
-    # resample_poly filtra prima le frequenze sopra 500 Hz, poi riduce i campioni (FS/fs_originale):
-    # senza filtro quelle frequenze si "ripiegherebbero" sotto i 500 Hz (aliasing)
+    # resample_poly toglie le frequenze sopra 500 Hz prima di ridurre i campioni: senza filtro
+    # ricadrebbero sotto i 500 Hz (aliasing), come succederebbe a un sensore senza filtro anti-aliasing
     return scipy.signal.resample_poly(x, FS, fs_originale)
 
 
@@ -78,7 +77,6 @@ def analizza(x: np.ndarray) -> tuple[float, float, float]:
 
     Esempio: sinusoide 50 Hz, 0,3 g, più 1 g di gravità -> (0.2121, 49.8, 0.28 circa)
     """
-    
     y = x - x.mean()
     rms = np.sqrt(np.mean(y ** 2))
     amp = np.abs(np.fft.rfft(y)) * 2 / len(y)

@@ -1,6 +1,6 @@
 """Riceve le misure dal broker MQTT e le salva nella tabella `misure` di TimescaleDB.
 
-Avvio:  python ingestor.py
+Avvio:  uv run python ingestor.py
 """
 import json
 import os
@@ -8,52 +8,34 @@ import os
 import paho.mqtt.client as mqtt
 import psycopg
 
-MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORTA = int(os.getenv("MQTT_PORTA", "1883"))
 TOPIC = "vibrazioni/#"
-DB_URL = os.getenv("DB_URL", "postgresql://vibrazioni:vibrazioni@localhost:5432/vibrazioni")
+DB_URL = os.getenv("DB_URL", "postgresql://vibrazioni:vibrazioni@127.0.0.1:5432/vibrazioni")
 
-INSERISCI = """
-    INSERT INTO misure (dispositivo, rms_g, picco_hz, picco_g, persi, saltati, classe, confidenza)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-"""
+CAMPI = ("dispositivo", "rms_g", "picco_hz", "picco_g", "persi", "saltati", "classe", "confidenza")
+OBBLIGATORI = ("dispositivo", "rms_g", "persi", "saltati")
+INSERISCI = f"INSERT INTO misure ({', '.join(CAMPI)}) VALUES ({', '.join(['%s'] * len(CAMPI))})"
 
 
 def riga_da_messaggio(testo: bytes) -> tuple | None:
-    """Trasforma il JSON dell'ESP32 nella tupla da inserire, nell'ordine di INSERISCI.
+    """Il JSON della scheda come tupla da inserire, nell'ordine di CAMPI.
 
-    Restituisce None se il messaggio non è valido (così un messaggio rotto
-    non ferma il programma: lo si scarta e si va avanti).
+    I campi che possono mancare (picco sotto soglia, firmware senza classificatore) diventano None.
+    Un messaggio non valido dà None: si scarta e si va avanti, senza fermare il programma.
 
     Esempio:
       b'{"dispositivo":"esp32-1","rms_g":0.21,"picco_hz":49.8,"picco_g":0.28,"persi":0,"saltati":0,
          "classe":"normale","confidenza":0.97}'
       -> ("esp32-1", 0.21, 49.8, 0.28, 0, 0, "normale", 0.97)
-
-    classe e confidenza possono mancare (firmware precedente al classificatore): diventano None.
     """
-
     try:
-        json_data = json.loads(testo)
+        dati = json.loads(testo)
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None
-    
-    if not isinstance(json_data, dict):
+    if not isinstance(dati, dict) or any(dati.get(c) is None for c in OBBLIGATORI):
         return None
-
-    dispositivo = json_data.get("dispositivo")
-    rms_g = json_data.get("rms_g")
-    picco_hz = json_data.get("picco_hz")
-    picco_g = json_data.get("picco_g")
-    persi = json_data.get("persi")
-    saltati = json_data.get("saltati")
-    classe = json_data.get("classe")
-    confidenza = json_data.get("confidenza")
-
-    if None in (dispositivo, rms_g, persi, saltati):
-        return None
-
-    return (dispositivo, rms_g, picco_hz, picco_g, persi, saltati, classe, confidenza)
+    return tuple(dati.get(c) for c in CAMPI)
 
 
 def main() -> None:
