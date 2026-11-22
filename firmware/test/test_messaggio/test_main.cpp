@@ -6,26 +6,26 @@ void setUp() {}
 void tearDown() {}
 
 void test_con_picco() {
-    Misura m = {0.212f, 49.8f, 0.28f, 0, 3};
+    Misura m = {0.212f, 49.8f, 0.28f, 0, 3, "squilibrio", 0.876f};
     char buf[200];
     int n = componi_messaggio(buf, sizeof(buf), "esp32-1", &m);
     TEST_ASSERT_EQUAL_STRING(
         "{\"dispositivo\":\"esp32-1\",\"rms_g\":0.2120,\"picco_hz\":49.8,\"picco_g\":0.2800,"
-        "\"persi\":0,\"saltati\":3}", buf);
+        "\"persi\":0,\"saltati\":3,\"classe\":\"squilibrio\",\"confidenza\":0.88}", buf);
     TEST_ASSERT_EQUAL_INT((int)strlen(buf), n);
 }
 
 void test_picco_sotto_soglia_diventa_null() {
-    Misura m = {0.001f, 0.98f, 0.005f, 0, 0};
+    Misura m = {0.001f, 0.98f, 0.005f, 0, 0, "normale", 1.0f};
     char buf[200];
     componi_messaggio(buf, sizeof(buf), "esp32-1", &m);
     TEST_ASSERT_EQUAL_STRING(
         "{\"dispositivo\":\"esp32-1\",\"rms_g\":0.0010,\"picco_hz\":null,\"picco_g\":null,"
-        "\"persi\":0,\"saltati\":0}", buf);
+        "\"persi\":0,\"saltati\":0,\"classe\":\"normale\",\"confidenza\":1.00}", buf);
 }
 
 void test_buffer_piccolo() {
-    Misura m = {0.212f, 49.8f, 0.28f, 0, 0};
+    Misura m = {0.212f, 49.8f, 0.28f, 0, 0, "normale", 1.0f};
     char buf[20];
     TEST_ASSERT_EQUAL_INT(-1, componi_messaggio(buf, sizeof(buf), "esp32-1", &m));
 }

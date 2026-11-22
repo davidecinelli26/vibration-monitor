@@ -15,14 +15,16 @@ DB_URL = os.getenv("DB_URL", "postgresql://agente:agente@127.0.0.1:5432/vibrazio
 ISTRUZIONI = """\
 Sei un tecnico di manutenzione. Hai le misure di vibrazione di alcune macchine, una ogni secondo circa:
 rms_g (vibrazione complessiva), picco_hz e picco_g (frequenza e ampiezza del componente più forte,
-null se sotto 0,02 g). Il sensore vede solo le frequenze sotto 500 Hz.
+null se sotto 0,02 g), e classe: cosa dice un classificatore che gira sulla scheda ("normale",
+"squilibrio", "disallineamento" o "sconosciuta"). Il sensore vede solo le frequenze sotto 500 Hz.
 
 Come leggere i dati:
 - Le frequenze hanno una risoluzione di circa 1 Hz: 29,3 Hz e 30,3 Hz vanno letti come "circa 29,5 Hz".
 - Le macchine "mafaulda-*" e "motore-1" girano a circa 29,5 giri al secondo. Se l'RMS cresce e il picco
   resta vicino a 29,5 Hz, la causa più probabile è uno squilibrio: dillo con questa parola.
-- Il disallineamento NON si distingue da una macchina sana con questi dati. Non dire mai che una
-  macchina ha o non ha un disallineamento: di' che con questo sensore non si può stabilire.
+- Il disallineamento si vede solo dalla classe, non da RMS e picco. Se la classe è "disallineamento",
+  presentalo come un sospetto da verificare con un controllo, non come una certezza.
+- Classe "sconosciuta": il classificatore non si pronuncia, e nemmeno tu.
 - I guasti ai cuscinetti delle macchine "cwru-*" sono quasi invisibili sotto 500 Hz: non trarre
   conclusioni dalle loro piccole differenze.
 - "persi" o "saltati" maggiori di 0 vogliono dire che il sensore ha perso campioni: i dati di quel periodo
@@ -63,9 +65,10 @@ def righe(sql: str, parametri: dict | None = None) -> list[dict]:
 
 @server.tool()
 def elenca_dispositivi() -> list[dict]:
-    """Elenca le macchine che hanno mandato misure, con quante misure e la prima e l'ultima."""
+    """Elenca le macchine che hanno mandato misure: quante misure, la prima, l'ultima e l'ultima classe."""
     return righe("""
-        SELECT dispositivo, count(*) AS misure, min(ts) AS prima, max(ts) AS ultima
+        SELECT dispositivo, count(*) AS misure, min(ts) AS prima, max(ts) AS ultima,
+               (array_agg(classe ORDER BY ts DESC))[1] AS classe
         FROM misure GROUP BY dispositivo ORDER BY dispositivo
     """)
 
@@ -73,13 +76,14 @@ def elenca_dispositivi() -> list[dict]:
 @server.tool()
 def stato(dispositivo: str, minuti: int = 10) -> list[dict]:
     """Andamento di una macchina negli ultimi `minuti`, in al massimo 12 intervalli:
-    per ognuno rms_g, picco_hz, picco_g medi e quanti campioni il sensore ha perso."""
+    per ognuno rms_g, picco_hz, picco_g medi, la classe più frequente e quanti campioni il sensore ha perso."""
     # al massimo 12 righe: un risultato lungo riempirebbe il contesto del modello e gli farebbe
     # perdere le istruzioni
     return righe("""
         SELECT time_bucket(make_interval(mins => %(passo)s), ts) AS da,
                count(*) AS misure,
                avg(rms_g) AS rms_g, avg(picco_hz) AS picco_hz, avg(picco_g) AS picco_g,
+               mode() WITHIN GROUP (ORDER BY classe) AS classe,
                max(persi) AS persi, max(saltati) AS saltati
         FROM misure
         WHERE dispositivo = %(dispositivo)s AND ts > now() - make_interval(mins => %(minuti)s)

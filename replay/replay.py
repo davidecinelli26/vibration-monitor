@@ -1,10 +1,11 @@
-"""Riproduce le registrazioni CWRU come se fossero ESP32: stesso calcolo, stesso JSON, stesso topic.
+"""Riproduce le registrazioni CWRU e MAFAULDA come se fossero ESP32: stesso calcolo, stesso JSON, stesso topic.
 
 Avvio:  uv run python replay.py
 I file .mat vanno in dati/ (non sono nel repository: si scaricano da engineering.case.edu).
 """
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -19,6 +20,7 @@ SOGLIA_PICCO_G = 0.02     # come SOGLIA_PICCO_G nel firmware
 DATI = Path(__file__).parent / "dati"
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORTA = int(os.getenv("MQTT_PORTA", "1883"))
+MODELLO_H = Path(__file__).parent.parent / "firmware" / "lib" / "classificatore" / "modello.h"
 
 # (dispositivo, file in dati/, campioni al secondo originali)
 REGISTRAZIONI = [
@@ -84,7 +86,39 @@ def analizza(x: np.ndarray) -> tuple[float, float, float]:
     return float(rms), float(k * FS / len(y)), float(amp[k])
 
 
-def messaggio(dispositivo: str, rms_g: float, picco_hz: float, picco_g: float) -> str:
+def leggi_modello(percorso: Path = MODELLO_H) -> dict:
+    """Le tabelle del classificatore, lette dallo stesso modello.h che usa il firmware."""
+    testo = percorso.read_text(encoding="utf-8")
+    tabelle = {nome: np.array([float(v.rstrip("f")) for v in re.findall(r"[-+\d.e]+f", corpo)])
+               for nome, corpo in re.findall(r"float (\w+)\[.*?= (\{.*?\});", testo)}
+    tabelle["PESI"] = tabelle["PESI"].reshape(len(tabelle["BIAS"]), -1)
+    tabelle["NOMI_CLASSI"] = re.findall(r'"(\w+)"', re.search(r"NOMI_CLASSI.*", testo)[0])
+    tabelle["LIMITE"] = float(re.search(r"#define LIMITE ([-+\d.e]+)f", testo)[1])
+    return tabelle
+
+
+def energia_bande(x: np.ndarray) -> np.ndarray:
+    """Come energia_bande() nel firmware: log10 dell'energia in 16 bande (Hann) più log10 della varianza."""
+    y = x - x.mean()
+    potenza = np.abs(np.fft.rfft(y * np.hanning(len(y)))) ** 2
+    bande = potenza[1:len(y) // 2 + 1].reshape(16, -1).sum(axis=1)
+    return np.log10(np.concatenate([bande, [np.mean(y * y)]]) + 1e-12)
+
+
+def classifica(x: np.ndarray, m: dict) -> tuple[str, float]:
+    """Come classifica() nel firmware: la classe più probabile e la sua probabilità,
+    oppure ("sconosciuta", 0) se la finestra non somiglia a quelle dell'addestramento."""
+    normalizzate = (energia_bande(x) - m["MEDIA"]) / m["SCALA"]
+    if np.abs(normalizzate).max() > m["LIMITE"]:
+        return "sconosciuta", 0.0
+    z = m["PESI"] @ normalizzate + m["BIAS"]
+    p = np.exp(z - z.max())
+    p /= p.sum()
+    return m["NOMI_CLASSI"][int(p.argmax())], float(p.max())
+
+
+def messaggio(dispositivo: str, rms_g: float, picco_hz: float, picco_g: float,
+              classe: str, confidenza: float) -> str:
     """Lo stesso JSON di componi_messaggio() nel firmware."""
     sopra = picco_g >= SOGLIA_PICCO_G
     return json.dumps({
@@ -94,10 +128,13 @@ def messaggio(dispositivo: str, rms_g: float, picco_hz: float, picco_g: float) -
         "picco_g": round(picco_g, 4) if sopra else None,
         "persi": 0,
         "saltati": 0,
+        "classe": classe,
+        "confidenza": round(confidenza, 2),
     })
 
 
 def main() -> None:
+    modello = leggi_modello()
     finestre = {}
     for dispositivo, nome, fs in REGISTRAZIONI:
         x = carica(DATI / nome, fs)
@@ -112,7 +149,8 @@ def main() -> None:
     while True:     # finite le finestre ricomincia da capo, come un sensore sempre acceso
         sorgenti = {**finestre, "motore-1": finestre[fase_motore_1(i)]}
         for dispositivo, lista in sorgenti.items():
-            testo = messaggio(dispositivo, *analizza(lista[i % len(lista)]))
+            x = lista[i % len(lista)]
+            testo = messaggio(dispositivo, *analizza(x), *classifica(x, modello))
             client.publish(f"vibrazioni/{dispositivo}", testo)
             print(testo)
         i += 1

@@ -19,7 +19,8 @@ def db():
     conn.execute("""
         CREATE TEMP TABLE misure (
             ts timestamptz NOT NULL, dispositivo text NOT NULL, rms_g real NOT NULL,
-            picco_hz real, picco_g real, persi integer NOT NULL, saltati integer NOT NULL)
+            picco_hz real, picco_g real, persi integer NOT NULL, saltati integer NOT NULL,
+            classe text, confidenza real)
     """)
     server.conn = conn
     yield conn
@@ -27,18 +28,30 @@ def db():
     conn.close()
 
 
-def inserisci(conn, dispositivo, minuti_fa, rms, hz=29.3):
+def inserisci(conn, dispositivo, minuti_fa, rms, hz=29.3, classe="normale"):
     """Una misura al minuto, per ciascuno dei minuti indicati."""
     for m in minuti_fa:
         conn.execute(
-            "INSERT INTO misure VALUES (now() - %s * interval '1 minute', %s, %s, %s, 0.1, 0, 0)",
-            (m, dispositivo, rms, hz))
+            "INSERT INTO misure VALUES (now() - %s * interval '1 minute', %s, %s, %s, 0.1, 0, 0, %s, 0.9)",
+            (m, dispositivo, rms, hz, classe))
 
 
 def test_elenca_dispositivi(db):
     inserisci(db, "a", [1, 2, 3], 0.1)
     inserisci(db, "b", [1], 0.2)
     assert [(d["dispositivo"], d["misure"]) for d in server.elenca_dispositivi()] == [("a", 3), ("b", 1)]
+
+
+def test_elenca_dispositivi_ultima_classe(db):
+    inserisci(db, "a", [5, 4], 0.1, classe="normale")
+    inserisci(db, "a", [1], 0.3, classe="squilibrio")
+    assert server.elenca_dispositivi()[0]["classe"] == "squilibrio"
+
+
+def test_stato_classe_piu_frequente(db):
+    inserisci(db, "a", [1.1, 1.2], 0.2, classe="squilibrio")
+    inserisci(db, "a", [1.3], 0.2, classe="normale")
+    assert [r["classe"] for r in server.stato("a", minuti=600)] == ["squilibrio"]   # intervalli da 50 minuti: tutte nello stesso
 
 
 def test_stato_un_valore_al_minuto(db):

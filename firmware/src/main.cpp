@@ -5,6 +5,7 @@
 #include <math.h>
 #include "mpu.h"
 #include "analisi.h"
+#include "classificatore.h"
 #include "messaggio.h"
 
 const char    *WIFI_RETE   = "Wokwi-GUEST";          /* la rete simulata di Wokwi, senza password */
@@ -116,6 +117,7 @@ const float FS = 1000.0f;      /* campioni al secondo */
 
 /* globali, non nello stack del loop: sono 4 KB l'uno */
 static float z[N], re[N], im[N], amp[N / 2 + 1];
+static float car[N_CARATTERISTICHE], prob[N_CLASSI];
 
 void loop() {
     /* 1. riempi la finestra con N valori di Z presi dalla coda */
@@ -135,11 +137,14 @@ void loop() {
     float r = rms_senza_media(z, N);
     spettro(z, N, re, im, amp);
     int k = picco(amp, N / 2 + 1);
+    energia_bande(z, N, re, im, car);     /* riusa re e im: lo spettro è già in amp */
+    int classe = classifica(car, prob);
     uint32_t durata = micros() - t0;
 
     /* 3. componi il messaggio e invialo */
-    Misura m = {r, k * FS / N, amp[k], persi, saltati};
-    char json[200];
+    Misura m = {r, k * FS / N, amp[k], persi, saltati, NOMI_CLASSI[classe],
+                classe == SCONOSCIUTA ? 0.0f : prob[classe]};
+    char json[256];
     if (componi_messaggio(json, sizeof(json), DISPOSITIVO, &m) < 0) return;
 
     if (!mqtt.connected()) {

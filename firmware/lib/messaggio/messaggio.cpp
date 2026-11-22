@@ -6,15 +6,15 @@ int componi_messaggio(char *buf, size_t dim, const char *dispositivo, const Misu
     if (m->picco_g >= SOGLIA_PICCO_G) {
         n = snprintf(buf, dim,
                      "{\"dispositivo\":\"%s\",\"rms_g\":%.4f,\"picco_hz\":%.1f,\"picco_g\":%.4f,"
-                     "\"persi\":%lu,\"saltati\":%lu}",
+                     "\"persi\":%lu,\"saltati\":%lu,\"classe\":\"%s\",\"confidenza\":%.2f}",
                      dispositivo, m->rms_g, m->picco_hz, m->picco_g,
-                     (unsigned long)m->persi, (unsigned long)m->saltati);
+                     (unsigned long)m->persi, (unsigned long)m->saltati, m->classe, m->confidenza);
     } else {
         n = snprintf(buf, dim,
                      "{\"dispositivo\":\"%s\",\"rms_g\":%.4f,\"picco_hz\":null,\"picco_g\":null,"
-                     "\"persi\":%lu,\"saltati\":%lu}",
+                     "\"persi\":%lu,\"saltati\":%lu,\"classe\":\"%s\",\"confidenza\":%.2f}",
                      dispositivo, m->rms_g,
-                     (unsigned long)m->persi, (unsigned long)m->saltati);
+                     (unsigned long)m->persi, (unsigned long)m->saltati, m->classe, m->confidenza);
     }
     if (n < 0 || (size_t)n >= dim) return -1;
     return n;

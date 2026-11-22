@@ -7,7 +7,9 @@ CREATE TABLE misure (
     picco_hz    real,                  -- NULL: nessun picco sopra soglia
     picco_g     real,
     persi       integer     NOT NULL,
-    saltati     integer     NOT NULL
+    saltati     integer     NOT NULL,
+    classe      text,                  -- dal classificatore sulla scheda; NULL nei messaggi più vecchi
+    confidenza  real
 );
 
 -- Hypertable: TimescaleDB divide la tabella in blocchi per tempo,

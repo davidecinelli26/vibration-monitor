@@ -34,10 +34,19 @@ void test_dalla_finestra_alla_classe() {
     }
 }
 
+void test_segnale_diverso_da_mafaulda() {
+    /* la vibrazione finta di Wokwi: 50 Hz puri, niente a che vedere con le registrazioni */
+    float x[N], car[N_CARATTERISTICHE], prob[N_CLASSI];
+    for (int i = 0; i < N; i++) x[i] = 1.0f + 0.3f * sinf(6.28318531f * 50.0f * i / 1000.0f);
+    energia_bande(x, N, re, im, car);
+    TEST_ASSERT_EQUAL_STRING("sconosciuta", NOMI_CLASSI[classifica(car, prob)]);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_classifica_come_il_python);
     RUN_TEST(test_bande_come_il_python);
     RUN_TEST(test_dalla_finestra_alla_classe);
+    RUN_TEST(test_segnale_diverso_da_mafaulda);
     return UNITY_END();
 }

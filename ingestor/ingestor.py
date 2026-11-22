@@ -14,8 +14,8 @@ TOPIC = "vibrazioni/#"
 DB_URL = os.getenv("DB_URL", "postgresql://vibrazioni:vibrazioni@localhost:5432/vibrazioni")
 
 INSERISCI = """
-    INSERT INTO misure (dispositivo, rms_g, picco_hz, picco_g, persi, saltati)
-    VALUES (%s, %s, %s, %s, %s, %s)
+    INSERT INTO misure (dispositivo, rms_g, picco_hz, picco_g, persi, saltati, classe, confidenza)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 
@@ -26,8 +26,11 @@ def riga_da_messaggio(testo: bytes) -> tuple | None:
     non ferma il programma: lo si scarta e si va avanti).
 
     Esempio:
-      b'{"dispositivo":"esp32-1","rms_g":0.21,"picco_hz":49.8,"picco_g":0.28,"persi":0,"saltati":0}'
-      -> ("esp32-1", 0.21, 49.8, 0.28, 0, 0)
+      b'{"dispositivo":"esp32-1","rms_g":0.21,"picco_hz":49.8,"picco_g":0.28,"persi":0,"saltati":0,
+         "classe":"normale","confidenza":0.97}'
+      -> ("esp32-1", 0.21, 49.8, 0.28, 0, 0, "normale", 0.97)
+
+    classe e confidenza possono mancare (firmware precedente al classificatore): diventano None.
     """
 
     try:
@@ -44,11 +47,13 @@ def riga_da_messaggio(testo: bytes) -> tuple | None:
     picco_g = json_data.get("picco_g")
     persi = json_data.get("persi")
     saltati = json_data.get("saltati")
+    classe = json_data.get("classe")
+    confidenza = json_data.get("confidenza")
 
     if None in (dispositivo, rms_g, persi, saltati):
         return None
 
-    return (dispositivo, rms_g, picco_hz, picco_g, persi, saltati)
+    return (dispositivo, rms_g, picco_hz, picco_g, persi, saltati, classe, confidenza)
 
 
 def main() -> None:

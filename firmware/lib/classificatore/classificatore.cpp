@@ -3,7 +3,11 @@
 
 int classifica(const float *caratteristiche, float *prob) {
     float x[N_CARATTERISTICHE];
-    for (int j = 0; j < N_CARATTERISTICHE; j++) x[j] = (caratteristiche[j] - MEDIA[j]) / SCALA[j];
+    bool fuori = false;
+    for (int j = 0; j < N_CARATTERISTICHE; j++) {
+        x[j] = (caratteristiche[j] - MEDIA[j]) / SCALA[j];
+        if (fabsf(x[j]) > LIMITE) fuori = true;
+    }
 
     int migliore = 0;
     for (int c = 0; c < N_CLASSI; c++) {
@@ -15,5 +19,5 @@ int classifica(const float *caratteristiche, float *prob) {
     float massimo = prob[migliore], somma = 0;
     for (int c = 0; c < N_CLASSI; c++) { prob[c] = expf(prob[c] - massimo); somma += prob[c]; }
     for (int c = 0; c < N_CLASSI; c++) prob[c] /= somma;
-    return migliore;
+    return fuori ? SCONOSCIUTA : migliore;
 }

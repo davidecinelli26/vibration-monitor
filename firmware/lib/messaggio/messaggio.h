@@ -9,6 +9,8 @@ struct Misura {
     float    picco_g;    /* ampiezza di quel cassetto */
     uint32_t persi;
     uint32_t saltati;
+    const char *classe;      /* cosa dice il classificatore */
+    float    confidenza;  /* probabilità di quella classe, da 0 a 1 */
 };
 
 /* Sotto questa ampiezza il picco è rumore: nel messaggio diventa null. */

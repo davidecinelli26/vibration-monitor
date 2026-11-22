@@ -17,6 +17,10 @@ from sklearn.preprocessing import StandardScaler
 from studio import CLASSI, DATI, carica, energia_bande, finestre
 
 FIRMWARE = Path(__file__).parent.parent / "firmware"
+# Oltre LIMITE deviazioni standard da quello visto in addestramento, la finestra non somiglia
+# a MAFAULDA e il modello direbbe una classe a caso con sicurezza: si risponde "sconosciuta".
+# In addestramento si arriva al massimo a 5; CWRU e la sinusoide di Wokwi stanno tra 13 e 64.
+LIMITE = 6.0
 
 
 def c(v) -> str:
@@ -38,6 +42,9 @@ def main() -> None:
     p = np.exp(z - z.max(axis=1, keepdims=True))
     assert np.allclose(p / p.sum(axis=1, keepdims=True), modello.predict_proba(X))
     print(f"accuratezza sulle finestre di addestramento: {np.mean(modello.predict(X) == y):.3f}")
+    distanza = np.abs((X - scala.mean_) / scala.scale_).max(axis=1).max()
+    assert distanza < LIMITE, distanza
+    print(f"distanza massima in addestramento: {distanza:.1f} deviazioni standard (limite {LIMITE})")
 
     n_car, n_classi = X.shape[1], len(CLASSI)
     (FIRMWARE / "lib" / "classificatore" / "modello.h").write_text(f"""\
@@ -46,8 +53,10 @@ def main() -> None:
 
 #define N_CARATTERISTICHE {n_car}
 #define N_CLASSI {n_classi}
+#define SCONOSCIUTA N_CLASSI
+#define LIMITE {c(LIMITE)}
 
-static const char *const NOMI_CLASSI[N_CLASSI] = {{{", ".join(f'"{n}"' for n in CLASSI)}}};
+static const char *const NOMI_CLASSI[N_CLASSI + 1] = {{{", ".join(f'"{n}"' for n in CLASSI)}, "sconosciuta"}};
 static const float MEDIA[N_CARATTERISTICHE] = {c(scala.mean_)};
 static const float SCALA[N_CARATTERISTICHE] = {c(scala.scale_)};
 static const float PESI[N_CLASSI][N_CARATTERISTICHE] = {c(logistica.coef_)};

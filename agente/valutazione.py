@@ -42,17 +42,18 @@ MODELLI = {
     "gemini-flash":      (GEMINI, "gemini-flash-latest", "GEMINI_API_KEY"),
 }
 
-# (dispositivo, (rms_g, picco_hz, picco_g, persi) da 65 a 5 minuti fa, lo stesso negli ultimi 5 minuti).
+# (dispositivo, (rms_g, picco_hz, picco_g, persi, classe) da 65 a 5 minuti fa, lo stesso negli ultimi 5 minuti).
 # motore-1 sviluppa uno squilibrio: RMS da 0,168 a 0,52 con il picco fermo a circa 29,5 Hz
-# (valori misurati sulle registrazioni MAFAULDA). motore-2 vibra normalmente, ma il suo sensore
-# comincia a perdere campioni. Le altre macchine non cambiano.
+# (valori misurati sulle registrazioni MAFAULDA, classi come le dà il replay). motore-2 vibra
+# normalmente, ma il suo sensore comincia a perdere campioni. Le altre macchine non cambiano.
 SCENARIO = [
-    ("motore-1",                      (0.168, 29.3, 0.150, 0), (0.520, 29.3, 0.665, 0)),
-    ("motore-2",                      (0.170, 29.3, 0.150, 0), (0.171, 29.3, 0.152, 37)),
-    ("mafaulda-normale",              (0.168, 29.3, 0.150, 0), (0.168, 29.3, 0.150, 0)),
-    ("mafaulda-disallineamento-oriz", (0.136, 29.3, 0.140, 0), (0.136, 29.3, 0.140, 0)),
-    ("cwru-anello-interno",           (0.026, None, None, 0),  (0.026, None, None, 0)),
-    ("cwru-normale",                  (0.021, None, None, 0),  (0.021, None, None, 0)),
+    ("motore-1",                      (0.168, 29.3, 0.150, 0, "normale"),     (0.520, 29.3, 0.665, 0, "squilibrio")),
+    ("motore-2",                      (0.170, 29.3, 0.150, 0, "normale"),     (0.171, 29.3, 0.152, 37, "normale")),
+    ("mafaulda-normale",              (0.168, 29.3, 0.150, 0, "normale"),     (0.168, 29.3, 0.150, 0, "normale")),
+    ("mafaulda-disallineamento-oriz", (0.136, 29.3, 0.140, 0, "disallineamento"),
+                                      (0.136, 29.3, 0.140, 0, "disallineamento")),
+    ("cwru-anello-interno",           (0.026, None, None, 0, "sconosciuta"),  (0.026, None, None, 0, "sconosciuta")),
+    ("cwru-normale",                  (0.021, None, None, 0, "sconosciuta"),  (0.021, None, None, 0, "sconosciuta")),
 ]
 
 # (domanda, controlli). Un controllo è (descrizione, espressione regolare, deve_esserci).
@@ -65,9 +66,12 @@ DOMANDE = [
         ("non accusa la macchina sana", r"mafaulda-normale", False),
     ]),
     ("Il motore-1 ha un problema di disallineamento?", [
-        ("dice che il disallineamento non si può stabilire",
-         r"non\b.{0,60}(distingu|stabilir|determinar|possibile|può|riconosc)", True),
+        ("dice che il problema è uno squilibrio", r"squilibri", True),
         ("non conclude 'squilibrio o disallineamento'", r"squilibrio o (un )?disallineamento", False),
+    ]),
+    ("Che problema ha la macchina mafaulda-disallineamento-oriz?", [
+        ("dice disallineamento", r"disallineament", True),
+        ("lo presenta come da verificare", r"(verific|indicazion|conferm|probabil|possibil|sospett|controll)", True),
     ]),
     ("Da quando il motore-1 vibra di più, e quanto?", [
         ("cita l'RMS di prima (circa 0,17)", r"0[.,]1[67]", True),
@@ -77,8 +81,6 @@ DOMANDE = [
     ("La macchina mafaulda-normale ha qualche problema?", [
         ("dice che è regolare", r"(nessun|non (ha|presenta|mostra|risulta|sembra)|regolar|stabil|normale)", True),
         ("non le attribuisce uno squilibrio", r"mafaulda-normale[^.]{0,80}squilibri", False),
-        ("non esclude un disallineamento (non si può sapere)",
-         r"non (presenta|ha|mostra)[^.]{0,40}disallineamento", False),
     ]),
     ("Le macchine cwru hanno guasti ai cuscinetti?", [
         ("spiega che sotto 500 Hz non si vedono",
@@ -123,14 +125,15 @@ def prepara_scenario() -> None:
         db.execute("""
             CREATE TABLE misure (
                 ts timestamptz NOT NULL, dispositivo text NOT NULL, rms_g real NOT NULL,
-                picco_hz real, picco_g real, persi integer NOT NULL, saltati integer NOT NULL)""")
+                picco_hz real, picco_g real, persi integer NOT NULL, saltati integer NOT NULL,
+                classe text, confidenza real)""")
         db.execute("GRANT SELECT ON misure TO agente")
         with db.cursor() as cur:
             for dispositivo, prima, ora in SCENARIO:
                 righe = [(s, dispositivo, *(ora if s < 300 else prima))
                          for s in range(0, 65 * 60, 10)]          # una misura ogni 10 s, per 65 minuti
                 cur.executemany(
-                    "INSERT INTO misure VALUES (now() - %s * interval '1 second', %s, %s, %s, %s, %s, 0)", righe)
+                    "INSERT INTO misure VALUES (now() - %s * interval '1 second', %s, %s, %s, %s, %s, 0, %s, 0.95)", righe)
 
 
 async def chiedi(domanda: str) -> str:
