@@ -70,3 +70,22 @@ int picco(const float *ampiezza, int n_bin) {
     }
     return k_max;
 }
+
+void energia_bande(const float *x, int n, float *re, float *im, float *car) {
+    float somma_quadrati = 0;
+    float media_x = media(x, n);
+    for (int i = 0; i < n; i++) {
+        float x_i = x[i] - media_x;
+        somma_quadrati += x_i * x_i;
+        float hann = 0.5f - 0.5f * cosf(DUE_PI * i / (n - 1));
+        re[i] = x_i * hann;
+        im[i] = 0;
+    }
+    fft(re, im, n);
+    for (int b = 0; b < 16; b++) car[b] = 0;
+    for (int k = 1; k <= n / 2; k++) {
+        car[(k - 1) / 32] += re[k] * re[k] + im[k] * im[k];
+    }
+    for (int b = 0; b < 16; b++) car[b] = log10f(car[b] + 1e-12f);
+    car[16] = log10f(somma_quadrati / n + 1e-12f);
+}
