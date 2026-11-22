@@ -158,24 +158,25 @@ The model is about 90 numbers (350 bytes) and the inference is a few hundred mul
 
 Free models only: four local ones on Ollama (laptop RTX 4050, 6 GB) and four on free hosted tiers (Groq, Google AI Studio), November 2026. One run each, temperature 0.
 
-| Model | Where | Tuning questions (25 checks) | Unseen questions (12 checks) | s / question |
+| Model | Where | Tuning questions (27 checks) | Unseen questions (12 checks) | s / question |
 |---|---|---|---|---|
-| gpt-oss-120b | Groq | 25 | **12** | 34 |
-| gpt-oss-20b | Groq | 25 | 11 | 22 |
-| qwen3 8B | local | 25 | 10 | 94 |
-| gemini-flash-lite | Google | 25 | 10 ¹ | 6 |
-| qwen3.8 27B | Groq | 25 | 9 ¹ | 22 |
-| qwen2.5 7B | local | 25 | 8 | 7 |
-| llama3.1 8B | local | 25 | 6 | 10 |
-| granite3.3 8B | local | 14 | 8 | 19 |
+| gpt-oss-120b | Groq | 27 | **12** | 32 |
+| gemini-flash-lite | Google | 27 | 10 | 8 |
+| gpt-oss-20b | Groq | 27 | 9 | 29 |
+| qwen3 8B | local | 27 | 9 | 82 |
+| qwen3.8 27B | Groq | 27 | 9 ¹ | 25 |
+| llama3.1 8B | local | 26 | 7 | 14 |
+| qwen2.5 7B | local | 25 | 6 | 9 |
+| granite3.3 8B | local | 14 | 6 | 19 |
 
-¹ One question lost to the free tier's rate limit (HTTP 429 / 413), counted as failed.
+¹ One question lost to the free tier's rate limit (HTTP 413), counted as failed.
 
 How to read it:
 
 - The instructions were tuned on qwen2.5 7B with the tuning questions, so most models score full marks there. The unseen column is the one that compares models, and with 12 checks a difference of one or two is noise.
 - The question almost every model got wrong is "are there problems with the sensors?". No tool reports lost samples across machines, so the models answer from `anomalie`, which only looks at RMS. That is a missing tool, not a weak model.
-- Locally, qwen3 8B is the most accurate but its reasoning makes it about 13 times slower than qwen2.5 7B. Hosted, the 120B model is the only one with every check right; the free tiers' rate limits are the price.
+- Locally, qwen3 8B is the most accurate but its reasoning makes it about 9 times slower than qwen2.5 7B. Hosted, the 120B model is the only one with every check right; the free tiers' rate limits are the price.
+- Adding the classifier made the instructions longer. On the unseen questions, compared with the version without it: qwen2.5 7B 8 → 6, gpt-oss-20b 11 → 9, qwen3 8B 10 → 9, llama3.1 8B 6 → 7, the others unchanged. With 12 checks and one run some of this is noise, but the direction is clear for the small models. The instructions were not re-tuned on the unseen questions, so this is the honest cost.
 
 ## Data
 
