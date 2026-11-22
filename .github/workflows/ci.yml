@@ -26,6 +26,7 @@ jobs:
   python:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         progetto: [ingestor, replay, agente]
     services:
@@ -48,4 +49,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"   # le versioni fissate (psycopg, scipy) hanno wheel fino a 3.13
       - run: uv run pytest -q
