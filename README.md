@@ -2,6 +2,7 @@
 
 **A machine vibration monitor, end to end: ESP32 firmware with FreeRTOS, an on-device FFT and a small fault classifier, MQTT, TimescaleDB and Grafana, fed by a real sensor or by public fault datasets, and an LLM agent that answers questions about the machines.**
 
+[![ci](https://github.com/davidecinelli26/vibration-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/davidecinelli26/vibration-monitor/actions/workflows/ci.yml)
 ![ESP32](https://img.shields.io/badge/ESP32-Arduino%20%2B%20FreeRTOS-2a9d8f)
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-264653)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-457b9d)
