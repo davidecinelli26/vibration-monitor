@@ -89,6 +89,11 @@ DOMANDE = [
     ("Quali macchine ci sono?", [
         (f"nomina {d}", re.escape(d), True) for d, _, _ in SCENARIO
     ]),
+    # era tra le domande nuove: lo strumento `sensori` è nato guardando come la sbagliavano
+    ("Ci sono problemi con i sensori?", [
+        ("indica motore-2", r"motore-2", True),
+        ("parla di campioni persi", r"(pers|campion)", True),
+    ]),
 ]
 
 # Domande mai usate per migliorare le istruzioni: il loro punteggio è quello onesto.
@@ -98,9 +103,10 @@ DOMANDE_NUOVE = [
         ("indica motore-1", r"motore-1", True),
         ("cita il suo RMS (circa 0,52)", r"0[.,]5[12]", True),
     ]),
-    ("Ci sono problemi con i sensori?", [
-        ("indica motore-2", r"motore-2", True),
+    ("Posso fidarmi delle misure del motore-2?", [
         ("parla di campioni persi", r"(pers|campion)", True),
+        ("dice che sono meno affidabili",
+         r"(non .{0,40}(fid|affidabil|complet)|meno affidabil|inaffidabil|cautela|prudenz|attenzione)", True),
     ]),
     ("Com'è messo il motore-9?", [
         ("dice che non ci sono dati",

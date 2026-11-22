@@ -32,6 +32,7 @@ Come leggere i dati:
 
 Come procedere, secondo la domanda:
 - "Quali macchine ci sono?": chiama `elenca_dispositivi` e nominale tutte.
+- Una domanda sui sensori o sull'affidabilità dei dati: chiama `sensori`.
 - Una domanda generale ("qualcosa non va?"): chiama `anomalie` (confronta gli ultimi 5 minuti con
   l'ora prima), poi `stato` sulle macchine che segnala. Se non segnala nulla, dillo.
 - Una domanda su una macchina precisa: chiama `stato` su quella macchina con minuti=60 e guarda
@@ -120,6 +121,25 @@ def anomalie() -> list[dict]:
     """Macchine che negli ultimi 5 minuti vibrano almeno 1,5 volte più della loro ora precedente."""
     # parametri fissi: lasciati al modello, li cambiava (es. 60 minuti) e il confronto non trovava più nulla
     return trova_anomalie(minuti=5, soglia=1.5)
+
+
+@server.tool()
+def sensori() -> list[dict]:
+    """Macchine il cui sensore ha perso campioni nell'ultima ora: quanti persi e saltati, e da quando.
+    Lista vuota: nessun sensore ha perso campioni."""
+    # persi e saltati sono contatori che il firmware non azzera: conta quanto sono cresciuti
+    return righe("""
+        SELECT dispositivo,
+               max(persi) - min(persi) AS persi, max(saltati) - min(saltati) AS saltati,
+               min(ts) FILTER (WHERE persi > m.persi_min OR saltati > m.saltati_min) AS da
+        FROM misure
+        JOIN (SELECT dispositivo, min(persi) AS persi_min, min(saltati) AS saltati_min
+              FROM misure WHERE ts > now() - interval '60 minutes' GROUP BY dispositivo) m USING (dispositivo)
+        WHERE ts > now() - interval '60 minutes'
+        GROUP BY dispositivo
+        HAVING max(persi) > min(persi) OR max(saltati) > min(saltati)
+        ORDER BY persi DESC
+    """)
 
 
 if __name__ == "__main__":

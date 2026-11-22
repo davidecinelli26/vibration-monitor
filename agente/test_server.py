@@ -28,12 +28,12 @@ def db():
     conn.close()
 
 
-def inserisci(conn, dispositivo, minuti_fa, rms, hz=29.3, classe="normale"):
+def inserisci(conn, dispositivo, minuti_fa, rms, hz=29.3, classe="normale", persi=0, saltati=0):
     """Una misura al minuto, per ciascuno dei minuti indicati."""
     for m in minuti_fa:
         conn.execute(
-            "INSERT INTO misure VALUES (now() - %s * interval '1 minute', %s, %s, %s, 0.1, 0, 0, %s, 0.9)",
-            (m, dispositivo, rms, hz, classe))
+            "INSERT INTO misure VALUES (now() - %s * interval '1 minute', %s, %s, %s, 0.1, %s, %s, %s, 0.9)",
+            (m, dispositivo, rms, hz, persi, saltati, classe))
 
 
 def test_elenca_dispositivi(db):
@@ -94,7 +94,22 @@ def test_anomalie_ignora_misure_troppo_vecchie(db):
     assert server.trova_anomalie(5, 1.5) == []
 
 
+def test_sensori_conta_quanto_crescono_i_contatori(db):
+    inserisci(db, "sano", range(1, 60), 0.1, persi=116)             # fermo a 116: non perde più nulla
+    inserisci(db, "guasto", range(6, 60), 0.1, persi=3)
+    inserisci(db, "guasto", range(1, 5), 0.1, persi=40, saltati=2)
+    risultato = server.sensori()
+    assert [(r["dispositivo"], r["persi"], r["saltati"]) for r in risultato] == [("guasto", 37, 2)]
+    assert isinstance(risultato[0]["da"], str)
+
+
+def test_sensori_ignora_perdite_vecchie(db):
+    inserisci(db, "a", range(70, 100), 0.1, persi=0)
+    inserisci(db, "a", range(1, 60), 0.1, persi=50)                  # la perdita è di più di un'ora fa
+    assert server.sensori() == []
+
+
 def test_strumenti_registrati():
     import asyncio
     nomi = {t.name for t in asyncio.run(server.server.list_tools())}
-    assert nomi == {"elenca_dispositivi", "stato", "anomalie"}
+    assert nomi == {"elenca_dispositivi", "stato", "anomalie", "sensori"}

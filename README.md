@@ -57,10 +57,10 @@ The replay applies the same analysis as the firmware (the tests check it gives t
 
 ### Agent
 
-- **MCP server** ([`agente/server.py`](agente/server.py)) with three tools: `elenca_dispositivi` (machines and their last message), `stato` (one machine over time, at most 12 intervals) and `anomalie` (machines whose RMS in the last 5 minutes is at least 1.5 times the hour before, with a TimescaleDB query). The tools also return the class from the board. The instructions carry the domain rules, including what the sensor cannot see and how far to trust the class.
+- **MCP server** ([`agente/server.py`](agente/server.py)) with four tools: `elenca_dispositivi` (machines and their last message), `stato` (one machine over time, at most 12 intervals), `anomalie` (machines whose RMS in the last 5 minutes is at least 1.5 times the hour before, with a TimescaleDB query) and `sensori` (machines whose sensor lost samples in the last hour; the firmware's counters never reset, so it counts how much they grew). The tools also return the class from the board. The instructions carry the domain rules, including what the sensor cannot see and how far to trust the class.
 - **Read-only by construction.** The server connects as a database role that has only `SELECT`, runs every transaction read-only and stops any query after 5 s. A wrong query from the model cannot change or block anything.
 - **Agent loop** ([`agente/agente.py`](agente/agente.py)): the model gets the question and the tools; when it asks for a tool, the loop runs it on the MCP server and sends the result back, for at most 8 steps. It talks the OpenAI-compatible API, so the same code runs on Ollama or on a hosted service.
-- **Evaluation** ([`agente/valutazione.py`](agente/valutazione.py)): a fixed scenario in its own database (one machine develops an imbalance, one sensor starts losing samples), 10 questions and regex checks on what each answer must and must not say. Four of the questions were never used to tune the instructions; their score is the honest one.
+- **Evaluation** ([`agente/valutazione.py`](agente/valutazione.py)): a fixed scenario in its own database (one machine develops an imbalance, one sensor starts losing samples), 11 questions and regex checks on what each answer must and must not say. Four of the questions were never used to tune the instructions or the tools; their score is the honest one. When a change was made after looking at one of them, that question moved to the tuning set and a new one took its place.
 
 Two things the evaluation taught, that held for every model: a long tool result pushed the instructions out of a small model's 4096-token context (so `stato` returns at most 12 rows), and a model given a parameter it could misuse did misuse it (so `anomalie` takes none).
 
@@ -98,7 +98,7 @@ Tests:
 cd firmware && pio test -e native     # 15 tests: sensor decoding, analysis, JSON, classifier = Python
 cd ingestor && uv run pytest -q       # 6 tests: message parsing
 cd replay && uv run pytest -q         # 13 tests: analysis, classes of the real data, motore-1 scenario
-cd agente && uv run pytest -q         # 9 tests: MCP tools against a temporary table (needs the database)
+cd agente && uv run pytest -q         # 11 tests: MCP tools against a temporary table (needs the database)
 ```
 
 The passwords in `infra/` are for local development only. The database and Grafana listen on 127.0.0.1, and Grafana has no login.
@@ -158,25 +158,25 @@ The model is about 90 numbers (350 bytes) and the inference is a few hundred mul
 
 Free models only: four local ones on Ollama (laptop RTX 4050, 6 GB) and four on free hosted tiers (Groq, Google AI Studio), November 2026. One run each, temperature 0.
 
-| Model | Where | Tuning questions (27 checks) | Unseen questions (12 checks) | s / question |
+| Model | Where | Tuning questions (30 checks) | Unseen questions (12 checks) | s / question |
 |---|---|---|---|---|
-| gpt-oss-120b | Groq | 27 | **12** | 32 |
-| gemini-flash-lite | Google | 27 | 10 | 8 |
-| gpt-oss-20b | Groq | 27 | 9 | 29 |
-| qwen3 8B | local | 27 | 9 | 82 |
-| qwen3.8 27B | Groq | 27 | 9 ¹ | 25 |
-| llama3.1 8B | local | 26 | 7 | 14 |
-| qwen2.5 7B | local | 25 | 6 | 9 |
-| granite3.3 8B | local | 14 | 6 | 19 |
+| qwen3.8 27B | Groq | 30 | **12** | 26 |
+| gpt-oss-120b | Groq | 30 | 11 ¹ | 20 |
+| gemini-flash-lite | Google | 30 | 11 | 6 |
+| gpt-oss-20b | Groq | 30 | 10 | 16 |
+| qwen3 8B | local | 30 | 9 | 68 |
+| llama3.1 8B | local | 28 | 8 | 10 |
+| granite3.3 8B | local | 16 | 8 | 19 |
+| qwen2.5 7B | local | 28 | 5 | 10 |
 
-¹ One question lost to the free tier's rate limit (HTTP 413), counted as failed.
+¹ One question lost to an HTTP 400 from Groq ("the model generated output that could not be parsed", a malformed tool call), counted as failed.
 
 How to read it:
 
 - The instructions were tuned on qwen2.5 7B with the tuning questions, so most models score full marks there. The unseen column is the one that compares models, and with 12 checks a difference of one or two is noise.
-- The question almost every model got wrong is "are there problems with the sensors?". No tool reports lost samples across machines, so the models answer from `anomalie`, which only looks at RMS. That is a missing tool, not a weak model.
-- Locally, qwen3 8B is the most accurate but its reasoning makes it about 9 times slower than qwen2.5 7B. Hosted, the 120B model is the only one with every check right; the free tiers' rate limits are the price.
-- Adding the classifier made the instructions longer. On the unseen questions, compared with the version without it: qwen2.5 7B 8 → 6, gpt-oss-20b 11 → 9, qwen3 8B 10 → 9, llama3.1 8B 6 → 7, the others unchanged. With 12 checks and one run some of this is noise, but the direction is clear for the small models. The instructions were not re-tuned on the unseen questions, so this is the honest cost.
+- "Are there problems with the sensors?" used to be the question almost every model got wrong: no tool reported lost samples, so the models answered from `anomalie`, which only looks at RMS. That was a missing tool, not a weak model. With `sensori` every model except granite gets it right; since the tool was designed by looking at those answers, the question now counts as tuning.
+- Locally, qwen3 8B is the most accurate but its reasoning makes it about 7 times slower than qwen2.5 7B. Hosted, qwen3.8 27B got every check right this time and gpt-oss-120b lost one only to an API error; across the runs so far the two are the most reliable, and the free tiers' rate limits and occasional errors are the price.
+- The unseen questions are where the hosted models pull away. The small local ones mostly fail by not calling a tool at all (answering "should I stop motore-1?" or "can I trust motore-2's data?" from nothing) or by inventing data for a machine that does not exist. qwen2.5 7B, on which the instructions were tuned, is the weakest on unseen questions: tuning on one model does not transfer as well as it seems.
 
 ## Data
 
