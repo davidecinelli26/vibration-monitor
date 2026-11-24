@@ -99,7 +99,7 @@ uv run --env-file .env python sorveglia.py
 
 Then open the dashboard at http://localhost:3000/d/vibrazioni: the class of each machine over time, RMS, peak amplitude and frequency, and the board's lost-sample counters.
 
-To retrain the classifier after changing the features: `cd modello && uv run python studio.py` (cross-validation) and `uv run python esporta.py` (writes `firmware/lib/classificatore/modello.h` and the test examples).
+To retrain the classifier after changing the features: `cd modello && uv run python studio.py` (cross-validation) and `uv run python esporta.py` (writes `firmware/lib/classificatore/modello.h` and the test examples). The speed test: `uv run python velocita.py --scarica` (reads 5.8 GB once, keeps about 30 MB).
 
 Tests:
 
@@ -157,8 +157,9 @@ Two notes on MAFAULDA. The dataset page says 50 kHz, but the file names (the rot
 What to keep in mind:
 
 - **Imbalance** is recognized from the 0–31 Hz band (the rotation speed) and the RMS, as the physics says.
-- **Healthy vs misalignment** is decided by high bands: the healthy machine has about 4 times more energy at 280–400 Hz, misalignment more at 440–500 Hz. These are not the textbook frequencies (twice the rotation speed). All 4 healthy recordings come from the same session, so the model may be recognizing that session rather than the absence of misalignment. More healthy recordings are needed to tell.
+- **Healthy vs misalignment** is decided by high bands: the healthy machine has about 4 times more energy at 280–400 Hz, misalignment more at 440–500 Hz. These are not the textbook frequencies (twice the rotation speed). All 4 healthy recordings come from the same session, so the model may be recognizing that session rather than the absence of misalignment. The speed test below makes this less likely: trained on all 49 healthy recordings (12 to 62 revolutions per second), the model still recognizes 91% of healthy windows at speeds it never saw.
 - **Outside MAFAULDA the class means nothing**, and a logistic regression does not know that: on the CWRU bearings it said "misalignment" with 100% confidence. The fix is the distance check: training windows are at most 5 standard deviations from the mean, CWRU windows 13 to 22, the simulator's synthetic sine 64. Above 6 the board answers `sconosciuta`, and the tests check this for CWRU and for the sine.
+- **The model on the board only knows one speed.** [`modello/velocita.py`](modello/velocita.py) runs it on all 880 MAFAULDA recordings: at speeds other than 28–32 revolutions per second it is right on only 66% of the windows, it calls most imbalances misalignment, and the distance check catches just 6%. A speed change moves the bands without moving them far from the training data. Trained on all speeds and tested on bands of 5 revolutions per second left out one at a time, balanced accuracy is 0.85: 0.88–0.95 above 20 revolutions per second, 0.53–0.67 below, where the vibration is small. The board keeps the 30 Hz model: with all speeds, the distance check would let some CWRU windows through (minimum distance 3.7 instead of 13).
 - On a real machine with a real MPU-6050 the model has to be retrained: the units, the mounting and the machine are all different.
 
 The model is about 90 numbers (350 bytes) and the inference is a few hundred multiplications on top of the FFT the firmware already does. The native tests check that the C code gives the same features (within 0.001) and the same probabilities (within 0.0001) as Python on real windows of each class.
