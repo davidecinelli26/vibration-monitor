@@ -16,6 +16,7 @@ Senza le due variabili i messaggi vengono solo stampati: utile per provare.
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -55,7 +56,8 @@ async def spiega(nuove: dict[str, dict]) -> str:
         "Avviso automatico, nessuno ha fatto domande. Il controllo periodico ha trovato queste "
         f"segnalazioni: {json.dumps(nuove, ensure_ascii=False)}. "
         "Guarda le macchine coinvolte con gli strumenti e scrivi l'avviso per il tecnico: cosa succede, "
-        "da quando, e cosa conviene fare. Al massimo cinque frasi."
+        "da quando, e cosa conviene fare. La classe della scheda è un sospetto, non una diagnosi: "
+        "consiglia un controllo, non di fermare la macchina. Al massimo cinque frasi."
     )
     return await rispondi(domanda)
 
@@ -65,7 +67,8 @@ def invia(testo: str) -> None:
     if not (token and chat):
         print(f"(prova, niente Telegram)\n{testo}\n")
         return
-    testo = testo.replace("**", "")[:MAX_CARATTERI]       # i modelli scrivono in Markdown, qui va testo semplice
+    # i modelli scrivono in Markdown e citano gli strumenti come 【stato】: qui va testo semplice
+    testo = re.sub(r"\*\*|【[^】]*】", "", testo)[:MAX_CARATTERI]
     dati = urllib.parse.urlencode({"chat_id": chat, "text": testo}).encode()
     with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage", dati, timeout=10) as r:
         if not json.load(r).get("ok"):
