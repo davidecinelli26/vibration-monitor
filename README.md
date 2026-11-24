@@ -14,7 +14,7 @@ An ESP32 reads an MPU-6050 accelerometer 1000 times a second. Every 1024 samples
 
 The same pipeline can be fed without hardware. A replay program reads recordings of healthy and faulty machines from two public datasets (CWRU and MAFAULDA), reduces them to what the 1 kHz sensor would see, and publishes the same JSON on the same topics. That shows what a cheap sensor can and cannot detect. The answer turned out to be less obvious than expected; see [Results](#results).
 
-An agent answers questions about the machines ("is anything behaving strangely?") through an MCP server with read-only tools on the database. It runs on a local model or a hosted one, and an evaluation measures how well each model does.
+An agent answers questions about the machines ("is anything behaving strangely?") through an MCP server with read-only tools on the database. It runs on a local model or a hosted one, and an evaluation measures how well each model does. A watcher uses the same tools to send an alert on Telegram when a machine changes.
 
 **Status: work in progress.** Not yet tested on a real board and a real machine: so far the firmware runs in a simulator and the data come from the datasets.
 
@@ -61,6 +61,7 @@ The replay applies the same analysis as the firmware (the tests check it gives t
 - **MCP server** ([`agente/server.py`](agente/server.py)) with four tools: `elenca_dispositivi` (machines and their last message), `stato` (one machine over time, at most 12 intervals), `anomalie` (machines whose RMS in the last 5 minutes is at least 1.5 times the hour before, with a TimescaleDB query) and `sensori` (machines whose sensor lost samples in the last hour; the firmware's counters never reset, so it counts how much they grew). The tools also return the class from the board. The instructions carry the domain rules, including what the sensor cannot see and how far to trust the class.
 - **Read-only by construction.** The server connects as a database role that has only `SELECT`, runs every transaction read-only and stops any query after 5 s. A wrong query from the model cannot change or block anything.
 - **Agent loop** ([`agente/agente.py`](agente/agente.py)): the model gets the question and the tools; when it asks for a tool, the loop runs it on the MCP server and sends the result back, for at most 8 steps. It talks the OpenAI-compatible API, so the same code runs on Ollama or on a hosted service.
+- **Telegram alerts** ([`agente/sorveglia.py`](agente/sorveglia.py)): every minute it runs the same queries as `anomalie` and `sensori`. The queries decide whether to alert, not the model: a threshold is wrong in the same way every time, a model is not, and calling one every minute would cost money. The model only writes the alert, after looking at the machines with the tools. If it does not answer, the alert still goes out with the raw numbers. The same finding (for example an anomaly on `motore-1`) is sent at most once an hour.
 - **Evaluation** ([`agente/valutazione.py`](agente/valutazione.py)): a fixed scenario in its own database (one machine develops an imbalance, one sensor starts losing samples), 11 questions and regex checks on what each answer must and must not say. Four of the questions were never used to tune the instructions or the tools; their score is the honest one. When a change was made after looking at one of them, that question moved to the tuning set and a new one took its place.
 
 Two things the evaluation taught, that held for every model: a long tool result pushed the instructions out of a small model's 4096-token context (so `stato` returns at most 12 rows), and a model given a parameter it could misuse did misuse it (so `anomalie` takes none).
@@ -87,6 +88,10 @@ cd ../agente && uv run python agente.py "C'è qualche macchina che si sta compor
 
 # 5. compare models; hosted ones read their keys from agente/.env (never committed)
 uv run --env-file .env python valutazione.py qwen2.5-7b groq-gpt-oss-120b
+
+# 6. alerts on Telegram: a bot from @BotFather, TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in agente/.env
+#    (without them the alerts are only printed)
+uv run --env-file .env python sorveglia.py
 ```
 
 Then open the dashboard at http://localhost:3000/d/vibrazioni: the class of each machine over time, RMS, peak amplitude and frequency, and the board's lost-sample counters.
@@ -99,7 +104,7 @@ Tests:
 cd firmware && pio test -e native     # 15 tests: sensor decoding, analysis, JSON, classifier = Python
 cd ingestor && uv run pytest -q       # 6 tests: message parsing
 cd replay && uv run pytest -q         # 13 tests: analysis, classes of the real data, motore-1 scenario
-cd agente && uv run pytest -q         # 11 tests: MCP tools against a temporary table (needs the database)
+cd agente && uv run pytest -q         # 17 tests: MCP tools against a temporary table (needs the database), alert cooldown
 ```
 
 The passwords in `infra/` are for local development only. The database and Grafana listen on 127.0.0.1, and Grafana has no login.
