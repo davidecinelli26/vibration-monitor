@@ -65,6 +65,10 @@ The replay applies the same analysis as the firmware (the tests check it gives t
 
   > motore‑1: dall'ora 15:10 fino a 16:10 l'RMS è passato da 0,168 g a 0,52 g (rapporto ≈ 3,1) mantenendo il picco a ≈ 29,3 Hz, tipico della velocità di rotazione (≈ 29,5 giri/s); la classe "squilibrio" indica un possibile squilibrio da verificare con un controllo meccanico.
   > motore‑2: dal 16:05 il sensore ha perso 37 campioni, perciò i dati recenti sono meno affidabili; è consigliabile controllare il collegamento o la calibrazione del sensore.
+
+  The first alert that reached a phone, from the replay. It told the technician to stop the machine, which is too strong for a class that is only a suspicion, so the prompt now asks for a check instead:
+
+  <img src="docs/telegram.jpg" alt="Telegram alert about motore-1: RMS from 0.19 to 0.39 g, peak at 29.3 Hz, class changed from normal to imbalance" width="300">
 - **Evaluation** ([`agente/valutazione.py`](agente/valutazione.py)): a fixed scenario in its own database (one machine develops an imbalance, one sensor starts losing samples), 11 questions and regex checks on what each answer must and must not say. Four of the questions were never used to tune the instructions or the tools; their score is the honest one. When a change was made after looking at one of them, that question moved to the tuning set and a new one took its place.
 
 Two things the evaluation taught, that held for every model: a long tool result pushed the instructions out of a small model's 4096-token context (so `stato` returns at most 12 rows), and a model given a parameter it could misuse did misuse it (so `anomalie` takes none).
